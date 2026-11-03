@@ -190,6 +190,14 @@ type windowView struct {
 	ObservedAt    int64   `json:"observed_at"`
 }
 
+// retiredWindowView is a window the account reported earlier but no longer does, such as Claude's 5-hour
+// window after verified Ultra accounts lost it.
+type retiredWindowView struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	LastSeen int64  `json:"last_seen"`
+}
+
 type blockedModel struct {
 	Model string `json:"model"`
 	Until int64  `json:"until"`
@@ -210,6 +218,8 @@ type accountView struct {
 	LastSeenAt    int64          `json:"last_seen_at,omitempty"`
 	Windows       []windowView   `json:"windows"`
 	BlockedModels []blockedModel `json:"blocked_models,omitempty"`
+	// RetiredWindows lists windows in the stored history that the account no longer reports.
+	RetiredWindows []retiredWindowView `json:"retired_windows,omitempty"`
 }
 
 func handleQuota(c *gin.Context) {
@@ -229,6 +239,11 @@ func handleQuota(c *gin.Context) {
 	known, errKnown := svc.store.knownAccounts(c.Request.Context())
 	if errKnown != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errKnown.Error()})
+		return
+	}
+	lastSeen, errSeen := svc.store.windowsLastSeen(c.Request.Context())
+	if errSeen != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errSeen.Error()})
 		return
 	}
 
@@ -266,6 +281,7 @@ func handleQuota(c *gin.Context) {
 	accounts := make([]*accountView, 0, len(views))
 	labels := make(map[string]string)
 	for _, view := range views {
+		view.RetiredWindows = retiredWindows(view, lastSeen[view.AuthID])
 		accounts = append(accounts, view)
 		for _, window := range view.Windows {
 			labels[view.Provider+"|"+window.Key] = window.Label
@@ -332,6 +348,33 @@ func liveAccountView(auth *coreauth.Auth, now time.Time) *accountView {
 	}
 	sort.Slice(view.BlockedModels, func(i, j int) bool { return view.BlockedModels[i].Model < view.BlockedModels[j].Model })
 	return view
+}
+
+// retiredWindows lists the stored windows an account no longer reports, judged against its newest observation
+// of any window, live or stored.
+func retiredWindows(view *accountView, seen map[string]windowSeen) []retiredWindowView {
+	var newest time.Time
+	for _, window := range seen {
+		if window.At.After(newest) {
+			newest = window.At
+		}
+	}
+	current := make(map[string]bool, len(view.Windows))
+	for _, window := range view.Windows {
+		current[window.Key] = true
+		if observed := time.UnixMilli(window.ObservedAt).UTC(); window.ObservedAt > 0 && observed.After(newest) {
+			newest = observed
+		}
+	}
+	var out []retiredWindowView
+	for key, window := range seen {
+		if current[key] || !windowRetired(window.At, window.ResetsAt, newest) {
+			continue
+		}
+		out = append(out, retiredWindowView{Key: key, Label: windowLabel(view.Provider, key), LastSeen: window.At.UnixMilli()})
+	}
+	sort.Slice(out, func(i, j int) bool { return windowSortKey(out[i].Key) < windowSortKey(out[j].Key) })
+	return out
 }
 
 // windowLabel names a window key that only exists in history.

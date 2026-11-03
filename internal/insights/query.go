@@ -336,6 +336,41 @@ func (s *Store) quotaHistory(ctx context.Context, from, to time.Time) (map[strin
 	return out, closeRows(rows)
 }
 
+// windowSeen is the latest stored observation of one quota window.
+type windowSeen struct {
+	At       time.Time
+	ResetsAt time.Time
+}
+
+// windowsLastSeen returns the latest stored observation of every window, by account and window key.
+func (s *Store) windowsLastSeen(ctx context.Context) (map[string]map[string]windowSeen, error) {
+	rows, errQuery := s.db.QueryContext(ctx, `SELECT q.auth_id, q.window_key, q.ts_ms, MAX(q.resets_at_ms) FROM quota_samples q
+		JOIN (SELECT auth_id, window_key, MAX(ts_ms) AS m FROM quota_samples GROUP BY auth_id, window_key) p
+			ON q.auth_id = p.auth_id AND q.window_key = p.window_key AND q.ts_ms = p.m
+		GROUP BY q.auth_id, q.window_key, q.ts_ms`)
+	if errQuery != nil {
+		return nil, fmt.Errorf("insights: windows last seen: %w", errQuery)
+	}
+	out := make(map[string]map[string]windowSeen)
+	for rows.Next() {
+		var authID, windowKey string
+		var ts, resetsAt int64
+		if errScan := rows.Scan(&authID, &windowKey, &ts, &resetsAt); errScan != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("insights: scan windows last seen: %w", errScan)
+		}
+		if out[authID] == nil {
+			out[authID] = make(map[string]windowSeen)
+		}
+		seen := windowSeen{At: time.UnixMilli(ts).UTC()}
+		if resetsAt > 0 {
+			seen.ResetsAt = time.UnixMilli(resetsAt).UTC()
+		}
+		out[authID][windowKey] = seen
+	}
+	return out, closeRows(rows)
+}
+
 // knownAccounts returns every account the store has seen.
 func (s *Store) knownAccounts(ctx context.Context) ([]accountRow, error) {
 	rows, errQuery := s.db.QueryContext(ctx, `SELECT auth_id, provider, COALESCE(label,''), COALESCE(email,''), COALESCE(plan,''), last_seen_ms FROM accounts`)

@@ -779,6 +779,60 @@ func TestOverview(t *testing.T) {
 	}
 }
 
+func TestQuotaListsRetiredWindows(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := context.Background()
+	store := openTestStore(t)
+	svc := &Service{store: store}
+	previous := current.Swap(svc)
+	defer current.Store(previous)
+	manager := coreauth.NewManager(nil, nil, nil)
+	SetAuthManager(manager)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	gone := now.Add(-3 * 24 * time.Hour)
+	weekly := now.Add(2 * 24 * time.Hour)
+	auth := &coreauth.Auth{ID: "c1", Provider: "claude", Quota: coreauth.QuotaState{ObservedAt: now.Add(-time.Minute), Signals: map[string]string{
+		"Anthropic-Ratelimit-Unified-7d-Utilization": "0.74",
+		"Anthropic-Ratelimit-Unified-7d-Reset":       strconv.FormatInt(weekly.Unix(), 10),
+	}}}
+	if _, errRegister := manager.Register(ctx, auth); errRegister != nil {
+		t.Fatalf("register: %v", errRegister)
+	}
+	if errInsert := store.insertQuotaSamples(ctx, []quotaRow{
+		{TS: gone.Add(-time.Hour), AuthID: "c1", Provider: "claude", WindowKey: "5h", UsedPct: 30, ResetsAt: gone.Add(time.Hour), WindowMinutes: 300},
+		{TS: gone, AuthID: "c1", Provider: "claude", WindowKey: "5h", UsedPct: 35, ResetsAt: gone.Add(time.Hour), WindowMinutes: 300},
+		{TS: now.Add(-time.Minute), AuthID: "c1", Provider: "claude", WindowKey: "7d", UsedPct: 74, ResetsAt: weekly, WindowMinutes: 10080},
+	}); errInsert != nil {
+		t.Fatalf("insert quota: %v", errInsert)
+	}
+
+	engine := gin.New()
+	RegisterRoutes(engine.Group("/v8/management"))
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v8/management/insights/quota", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("quota = %d %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Accounts []accountView `json:"accounts"`
+	}
+	if errDecode := json.Unmarshal(rec.Body.Bytes(), &body); errDecode != nil {
+		t.Fatalf("decode: %v", errDecode)
+	}
+	if len(body.Accounts) != 1 {
+		t.Fatalf("accounts = %+v", body.Accounts)
+	}
+	account := body.Accounts[0]
+	if len(account.Windows) != 1 || account.Windows[0].Key != "7d" {
+		t.Fatalf("windows = %+v", account.Windows)
+	}
+	if len(account.RetiredWindows) != 1 || account.RetiredWindows[0].Key != "5h" || account.RetiredWindows[0].Label != "5-hour" ||
+		account.RetiredWindows[0].LastSeen != gone.UnixMilli() {
+		t.Fatalf("retired = %+v", account.RetiredWindows)
+	}
+}
+
 func TestBackupAndPrune(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t)

@@ -130,7 +130,11 @@ other people's traffic through the hub.
 
 - **Alerts**: open alerts, most severe first (see [Alerts and Luna](#alerts-and-luna)).
 - **Quota pools**: pooled quota per provider with recorded history, a projection at the current burn rate with
-  each account's resets, drain rate, and every account's 5-hour, weekly and model-specific windows.
+  each account's resets, drain rate, and every account's current windows (5-hour where the plan has one, weekly,
+  model-specific). A window an account stopped reporting is dropped once its period has ended and the account's
+  other windows have kept arriving for 6 hours; the account then shows "none reported since …". Verified Claude
+  Ultra accounts lost the 5-hour window on 30 October 2026, so Claude shows only weekly windows. The 5-hour
+  option appears only while some account still reports one.
 - **Usage**: tokens, requests, API value, cache hit rate and latency, by model, account, machine and tool, plus a
   weekday/hour heatmap.
 - **Accounts**: each account's share of its provider's traffic, API value, monthly pace against the plan price,
@@ -167,7 +171,8 @@ To copy a key on R2-D2 without displaying it:
 To rotate the viewer key, remove that secret (`Remove-Secret -Name CLIProxyAPI.Hub.InsightsViewerKey -Vault LocalSecrets`)
 and run `Install-Hub.ps1`, which creates a new one, updates the hash in `.env` and restarts the hub.
 
-The page fits phone screens; tap a chart to see its values.
+The page fits phone screens; tap a chart to see its values. It is dark by default; **Dark**, **Light** and
+**Auto** (follow the device) at the top switch it, and the choice is kept in the browser.
 After 5 wrong keys the hub blocks that IP address from all management endpoints for 30 minutes, even for the
 right key, and the viewer key counts toward the same limit. The dashboard then shows "IP banned due to too many failed attempts". Wait it out, or restart the hub
 to clear it, since the ban is kept in memory only.

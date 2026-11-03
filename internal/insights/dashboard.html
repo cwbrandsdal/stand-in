@@ -7,6 +7,15 @@
 <meta name="theme-color" content="#0d0d0d">
 <meta name="apple-mobile-web-app-title" content="Insights">
 <title>Insights · CLIProxyAPI</title>
+<script>
+  // Apply the saved theme before the first paint: dark (default), light, or auto (follow the device).
+  (function () {
+    var theme = "dark";
+    try { theme = JSON.parse(localStorage.getItem("insights.prefs") || "{}").theme || "dark"; } catch (_) {}
+    if (theme === "auto") theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+  })();
+</script>
 <style>
 .viz-root {
   color-scheme: dark;
@@ -35,35 +44,34 @@
   --good-text: #0ca30c;
   --seq: #0d366b, #104281, #184f95, #1c5cab, #256abf, #2a78d6, #3987e5, #5598e7, #6da7ec, #86b6ef;
 }
-@media (prefers-color-scheme: light) {
-  :root:where(:not([data-theme="dark"])) .viz-root {
-    color-scheme: light;
-    --page: #f9f9f7;
-    --surface: #fcfcfb;
-    --surface-raised: #f3f3f0;
-    --ink: #0b0b0b;
-    --ink-2: #52514e;
-    --muted: #898781;
-    --grid: #e1e0d9;
-    --axis: #c3c2b7;
-    --border: rgba(11, 11, 11, 0.10);
-    --wash: rgba(11, 11, 11, 0.04);
-    --series-1: #2a78d6;
-    --series-2: #eb6834;
-    --series-3: #1baf7a;
-    --series-4: #eda100;
-    --series-5: #e87ba4;
-    --series-6: #008300;
-    --series-7: #6250d6;
-    --series-8: #e34948;
-    --good-text: #006300;
-    --seq: #cde2fb, #b7d3f6, #9ec5f4, #86b6ef, #6da7ec, #5598e7, #3987e5, #2a78d6, #256abf, #1c5cab;
-  }
+/* Light theme: chosen on the page, or "Auto" on a device set to light. Dark is the default. */
+:root[data-theme="light"] .viz-root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-raised: #f3f3f0;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --wash: rgba(11, 11, 11, 0.04);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --good-text: #006300;
+  --seq: #cde2fb, #b7d3f6, #9ec5f4, #86b6ef, #6da7ec, #5598e7, #3987e5, #2a78d6, #256abf, #1c5cab;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: #0d0d0d; }
-@media (prefers-color-scheme: light) { body { background: #f9f9f7; } }
+:root[data-theme="light"] body { background: #f9f9f7; }
 .viz-root {
   min-height: 100vh;
   background: var(--page);
@@ -80,7 +88,8 @@ a { color: inherit; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .top .title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .sub { color: var(--muted); font-size: 13px; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.retired { color: var(--muted); font-size: 12px; }
 .btn {
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
   padding: 6px 12px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
@@ -94,6 +103,7 @@ a { color: inherit; }
   margin-top: 18px; padding: 10px 0; border-bottom: 1px solid var(--border);
 }
 .filter { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.filter[hidden] { display: none; }
 .seg { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
 .seg button { background: none; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; color: var(--ink-2); }
 .seg button:hover { background: var(--wash); }
@@ -232,6 +242,11 @@ textarea.sql {
       <span class="sub" id="hubStatus">Loading…</span>
     </div>
     <div class="actions">
+      <div class="seg" data-pref="theme" role="group" aria-label="Theme">
+        <button type="button" data-value="dark">Dark</button>
+        <button type="button" data-value="light">Light</button>
+        <button type="button" data-value="auto">Auto</button>
+      </div>
       <a class="btn" id="managementLink" href="/management.html">Management</a>
       <button class="btn" id="toggleEmails" type="button" aria-pressed="false">Show emails</button>
       <button class="btn" id="signOut" type="button">Forget key</button>
@@ -248,7 +263,7 @@ textarea.sql {
         <button type="button" data-value="90d">90 days</button>
       </div>
     </div>
-    <div class="filter"><span>Quota window</span>
+    <div class="filter" id="windowFilter"><span>Quota window</span>
       <div class="seg" data-pref="window" role="group" aria-label="Quota window">
         <button type="button" data-value="7d">Weekly</button>
         <button type="button" data-value="5h">5-hour</button>
@@ -527,7 +542,7 @@ textarea.sql {
   const NS = "http://www.w3.org/2000/svg";
 
   const $ = (id) => document.getElementById(id);
-  const prefs = Object.assign({ range: "7d", window: "7d", view: "remaining", burn: "3", future: "1", emails: false, threadSort: "cost" },
+  const prefs = Object.assign({ range: "7d", window: "7d", view: "remaining", burn: "3", future: "1", emails: false, threadSort: "cost", theme: "dark" },
     safeParse(localStorage.getItem("insights.prefs")));
   let data = null;
   let loadSeq = 0;
@@ -539,6 +554,12 @@ textarea.sql {
 
   function safeParse(raw) { try { return JSON.parse(raw) || {}; } catch (_) { return {}; } }
   function savePrefs() { localStorage.setItem("insights.prefs", JSON.stringify(prefs)); }
+  function applyTheme() {
+    const light = prefs.theme === "light" || (prefs.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
+    document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", light ? "#f9f9f7" : "#0d0d0d");
+  }
   function css(name) { return getComputedStyle($("main")).getPropertyValue(name).trim(); }
   function slotColor(slot) { return css("--series-" + slot); }
   function providerColor(p) { return slotColor(PROVIDER_SLOT[p] || 8); }
@@ -843,12 +864,25 @@ textarea.sql {
     const base = String(key).split(":").pop();
     return wanted === "5h" ? base === "5h" : base === "7d";
   }
+  // Windows an account no longer reports, such as Claude's 5-hour window on verified Ultra accounts.
+  function retiredKeys(a) { return new Set((a.retired_windows || []).map((w) => w.key)); }
+  function accountWindowKeys(a) {
+    const retired = retiredKeys(a);
+    const keys = new Set((a.windows || []).map((w) => w.key));
+    for (const k in data.quota.history[a.auth_id] || {}) if (!retired.has(k)) keys.add(k);
+    return keys;
+  }
+  function hasShortWindows() {
+    return data.quota.accounts.some((a) => !a.disabled && a.present && [...accountWindowKeys(a)].some((k) => windowMatches(k, "5h")));
+  }
+  // The window the pools show: the chosen one, or weekly when no active account reports a 5-hour window.
+  function quotaWindow() { return prefs.window === "5h" && !hasShortWindows() ? "7d" : prefs.window; }
 
   // members of a provider pool for one window key; each has sorted samples [{t, used, resets}].
   function poolMembers(provider, windowKey) {
     const out = [];
     for (const a of data.quota.accounts) {
-      if (a.provider !== provider || a.disabled || !a.present) continue;
+      if (a.provider !== provider || a.disabled || !a.present || retiredKeys(a).has(windowKey)) continue;
       const live = (a.windows || []).find((w) => w.key === windowKey);
       const hist = ((data.quota.history[a.auth_id] || {})[windowKey] || []).map((p) => ({ t: p[0], used: p[1], resets: p[2] }));
       if (live && live.observed_at && (!hist.length || live.observed_at > hist[hist.length - 1].t)) {
@@ -964,6 +998,7 @@ textarea.sql {
   function renderPools() {
     const host = $("pools");
     host.textContent = "";
+    $("windowFilter").hidden = !hasShortWindows();
     const now = data.quota.now;
     const span = RANGES[prefs.range];
     const from = now - span;
@@ -983,11 +1018,9 @@ textarea.sql {
     const color = providerColor(provider);
     const accounts = data.quota.accounts.filter((a) => a.provider === provider);
     const keys = new Set();
-    for (const a of accounts) {
-      for (const w of a.windows || []) keys.add(w.key);
-      for (const k in data.quota.history[a.auth_id] || {}) keys.add(k);
-    }
-    const windowKey = [...keys].find((k) => !k.includes(":") && windowMatches(k, prefs.window)) || [...keys].find((k) => windowMatches(k, prefs.window));
+    for (const a of accounts) for (const k of accountWindowKeys(a)) keys.add(k);
+    const wanted = quotaWindow();
+    const windowKey = [...keys].find((k) => !k.includes(":") && windowMatches(k, wanted)) || [...keys].find((k) => windowMatches(k, wanted));
     const card = el("div", { class: "card" });
     const active = accounts.filter((a) => !a.disabled);
     card.append(el("div", { class: "card-head" }, [
@@ -996,7 +1029,7 @@ textarea.sql {
       el("span", { class: "sub", text: windowKey ? windowLabel(provider, windowKey) + " window" : "" }),
     ]));
     if (!windowKey) {
-      card.append(el("div", { class: "empty", text: "No " + (prefs.window === "5h" ? "5-hour" : "weekly") + " quota observed yet for " + providerName(provider) + "." }));
+      card.append(el("div", { class: "empty", text: "No " + (wanted === "5h" ? "5-hour" : "weekly") + " quota observed yet for " + providerName(provider) + "." }));
       card.append(accountList(provider, accounts, keys, now));
       return { card, draw: () => {} };
     }
@@ -1097,10 +1130,12 @@ textarea.sql {
       if (u) meta.push(fmtInt(u.requests) + " requests · " + compact(u.total_tokens) + " tokens in range");
       const lastObserved = Math.max(0, ...(a.windows || []).map((w) => w.observed_at || 0));
       if (lastObserved) meta.push("quota seen " + dur(now - lastObserved) + " ago");
+      const retired = (a.retired_windows || []).map((w) => w.label + " limit: none reported since " + when(w.last_seen));
       row.append(el("div", { class: "who" }, [
         el("div", { class: "label", title: maskEmail(a.label) }, [document.createTextNode(maskEmail(a.label)), a.plan ? el("span", { class: "chip", text: a.plan }) : null]),
         accountState(a, now),
         el("div", { class: "meta", text: meta.join(" · ") }),
+        retired.length ? el("div", { class: "retired", text: retired.join(" · ") }) : null,
       ]));
       for (const key of ordered) row.append(meter(a, key, provider, now));
       host.append(row);
@@ -1390,7 +1425,8 @@ textarea.sql {
     let windows = (q && q.windows) || [];
     if (!windows.length) {
       const hist = (data.quota && data.quota.history && data.quota.history[authId]) || {};
-      windows = Object.keys(hist).map((key) => {
+      const retired = q ? retiredKeys(q) : new Set();
+      windows = Object.keys(hist).filter((key) => !retired.has(key)).map((key) => {
         const p = hist[key][hist[key].length - 1];
         return { key, label: windowLabel(provider, key), used_pct: p[1], resets_at: p[2] };
       });
@@ -1907,6 +1943,7 @@ textarea.sql {
       if (!b) return;
       prefs[seg.dataset.pref] = b.dataset.value;
       savePrefs(); syncControls();
+      if (seg.dataset.pref === "theme") applyTheme();
       if (seg.dataset.pref === "range") load(); else render();
     });
   }
@@ -1994,9 +2031,10 @@ textarea.sql {
   });
   addEventListener("scroll", hideTip, { passive: true });
   document.addEventListener("pointerdown", (evt) => { if (!evt.target.closest("svg")) hideTip(); });
-  matchMedia("(prefers-color-scheme: light)").addEventListener("change", render);
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (prefs.theme === "auto") { applyTheme(); render(); } });
   setInterval(() => { if (document.visibilityState === "visible" && !keyPrompt) load(); }, 60e3);
 
+  applyTheme();
   syncControls();
   load();
 })();

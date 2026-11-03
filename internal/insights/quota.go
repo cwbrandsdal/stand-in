@@ -30,7 +30,21 @@ type QuotaWindow struct {
 const (
 	claudeSignalPrefix = "Anthropic-Ratelimit-Unified-"
 	codexSignalPrefix  = "X-Codex-"
+	// retiredWindowGap is how long a window may go unreported while the same account's other windows keep
+	// arriving before it counts as gone. Claude stopped sending the 5-hour window for verified Ultra accounts
+	// on 30 October 2026, for example; without this its last observation would linger as a current window.
+	retiredWindowGap = 6 * time.Hour
 )
+
+// windowRetired reports whether a window last observed at lastSeen, resetting at resetsAt, is no longer
+// reported, given the newest observation of any of the account's windows. A window whose period has not
+// ended yet is kept: model-specific windows only arrive with requests for that model.
+func windowRetired(lastSeen, resetsAt, newest time.Time) bool {
+	if newest.Sub(lastSeen) <= retiredWindowGap {
+		return false
+	}
+	return resetsAt.IsZero() || !resetsAt.After(newest)
+}
 
 // parseQuotaWindows converts one passive quota signal snapshot into normalized windows.
 func parseQuotaWindows(provider string, signals map[string]string, observedAt time.Time) []QuotaWindow {
@@ -140,7 +154,8 @@ func parseCodexWindows(signals map[string]string, observedAt time.Time) []QuotaW
 	return windows
 }
 
-// windowsForAuth merges auth-level and model-level quota snapshots, keeping the newest observation per window.
+// windowsForAuth merges auth-level and model-level quota snapshots, keeping the newest observation per window
+// and leaving out windows the provider no longer reports (see windowRetired).
 func windowsForAuth(auth *coreauth.Auth) []QuotaWindow {
 	if auth == nil {
 		return nil
@@ -160,8 +175,17 @@ func windowsForAuth(auth *coreauth.Auth) []QuotaWindow {
 			add(state.Quota)
 		}
 	}
+	var newest time.Time
+	for _, window := range merged {
+		if window.ObservedAt.After(newest) {
+			newest = window.ObservedAt
+		}
+	}
 	windows := make([]QuotaWindow, 0, len(merged))
 	for _, window := range merged {
+		if windowRetired(window.ObservedAt, window.ResetsAt, newest) {
+			continue
+		}
 		windows = append(windows, window)
 	}
 	sort.Slice(windows, func(i, j int) bool { return windowSortKey(windows[i].Key) < windowSortKey(windows[j].Key) })

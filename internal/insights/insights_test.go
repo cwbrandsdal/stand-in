@@ -3,6 +3,7 @@ package insights
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -126,6 +127,38 @@ func TestWindowsForAuthPrefersNewestObservation(t *testing.T) {
 	windows := windowsForAuth(auth)
 	if len(windows) != 2 || windows[0].Key != "7d" || windows[0].UsedPct != 30 || windows[1].UsedPct != 50 {
 		t.Fatalf("windows = %+v", windows)
+	}
+}
+
+func TestWindowsForAuthDropsRetiredWindows(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0).UTC()
+	stale := now.Add(-7 * time.Hour)
+	auth := &coreauth.Auth{
+		ID:       "a",
+		Provider: "claude",
+		Quota: coreauth.QuotaState{ObservedAt: now, Signals: map[string]string{
+			"Anthropic-Ratelimit-Unified-7d-Utilization": "0.40",
+			"Anthropic-Ratelimit-Unified-7d-Reset":       strconv.FormatInt(now.Add(48*time.Hour).Unix(), 10),
+		}},
+		ModelStates: map[string]*coreauth.ModelState{
+			// Reported before the account lost its 5-hour window; that window has reset since.
+			"claude-opus-5-5": {Quota: coreauth.QuotaState{ObservedAt: stale, Signals: map[string]string{
+				"Anthropic-Ratelimit-Unified-5h-Utilization": "0.80",
+				"Anthropic-Ratelimit-Unified-5h-Reset":       strconv.FormatInt(stale.Add(2*time.Hour).Unix(), 10),
+			}}},
+			// A model-specific window seen as long ago, whose period is still running, stays.
+			"claude-fable-5-1": {Quota: coreauth.QuotaState{ObservedAt: stale, Signals: map[string]string{
+				"Anthropic-Ratelimit-Unified-7d_oi-Utilization": "0.20",
+				"Anthropic-Ratelimit-Unified-7d_oi-Reset":       strconv.FormatInt(now.Add(48*time.Hour).Unix(), 10),
+			}}},
+		},
+	}
+	windows := windowsForAuth(auth)
+	if len(windows) != 2 || windows[0].Key != "7d" || windows[1].Key != "7d_oi" {
+		t.Fatalf("windows = %+v, want 7d and 7d_oi", windows)
+	}
+	if windowRetired(stale, time.Time{}, stale.Add(retiredWindowGap)) {
+		t.Fatal("a window is retired only after more than the gap")
 	}
 }
 
