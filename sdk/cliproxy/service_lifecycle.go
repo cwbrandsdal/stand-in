@@ -426,6 +426,10 @@ func (s *Service) startModelCatalogUpdaters(ctx context.Context) {
 	if cfg != nil {
 		registry.StartModelCatalogUpdaters(ctx, cfg.Models, cfg.Home.Enabled)
 		proxyURL = cfg.ProxyURL
+		// Home mode has no local credentials; its control plane supplies the catalog.
+		if !cfg.Home.Enabled {
+			s.startCodexSpeedTierSync(ctx)
+		}
 	}
 	executor.StartXAIVersionUpdater(ctx, proxyURL)
 }

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -218,5 +220,47 @@ func TestManagementV8PluginOperationMigratesConfiguration(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("missing configuration reload")
+	}
+}
+
+func TestInsightsViewerKeyOpensOnlyInsightsRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const viewerKey = "insights-viewer-key-0123456789abcdef"
+	sum := sha256.Sum256([]byte(viewerKey))
+	t.Setenv("INSIGHTS_VIEWER_KEY_SHA256", hex.EncodeToString(sum[:]))
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("port: 8317\nremote-management: {allow-remote: true, secret-key: test-password}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Plugins.Dir = filepath.Dir(path)
+	s := &Server{cfg: cfg, engine: gin.New(), mgmt: management.NewHandler(cfg, path, nil)}
+	s.managementRoutesEnabled.Store(true)
+	s.registerManagementRoutes()
+
+	for _, tc := range []struct {
+		route string
+		want  int
+	}{
+		// 503 means the request passed authentication; no insights database is open in this test.
+		{"/v8/management/insights/status", http.StatusServiceUnavailable},
+		{"/v8/management/insights/requests", http.StatusServiceUnavailable},
+		{"/v8/management/config", http.StatusUnauthorized},
+		{"/v8/management/credentials", http.StatusUnauthorized},
+		{"/v8/management/credentials/download?name=x.json", http.StatusUnauthorized},
+		{"/v0/management/config", http.StatusUnauthorized},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.route, nil)
+		req.RemoteAddr = "192.0.2.10:1234"
+		req.Header.Set("Authorization", "Bearer "+viewerKey)
+		recorder := httptest.NewRecorder()
+		s.engine.ServeHTTP(recorder, req)
+		if recorder.Code != tc.want {
+			t.Fatalf("%s: status=%d want=%d body=%s", tc.route, recorder.Code, tc.want, recorder.Body.String())
+		}
 	}
 }

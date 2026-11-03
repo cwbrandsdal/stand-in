@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api/handlers/management"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/insights"
 )
 
 // registerManagementV8Routes defines the v8 contract independently of v0.
@@ -15,7 +16,7 @@ func (s *Server) registerManagementV8Routes() {
 	s.engine.POST(prefix+"/oauth/callback", s.managementAvailabilityMiddleware(), s.mgmt.PostOAuthCallbackV8)
 
 	v8 := s.engine.Group(prefix)
-	v8.Use(s.managementAvailabilityMiddleware(), s.mgmt.Middleware(), func(c *gin.Context) {
+	v8.Use(s.managementAvailabilityMiddleware(), recordManagementKeyRejections, s.mgmt.Middleware(), func(c *gin.Context) {
 		c.Set(management.ConfigV8ContextKey, true)
 	})
 	v8.GET("/config", s.mgmt.ConfigV8)
@@ -42,6 +43,14 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/observability/usage/api-keys", s.mgmt.GetAPIKeyUsage)
 	v8.GET("/observability/usage/queue", s.mgmt.GetUsageQueue)
 
+	// Insights only reads data, so its routes also accept the read-only viewer key.
+	// Every other route in this tree still requires the management key.
+	insightsGroup := s.engine.Group(prefix)
+	insightsGroup.Use(s.managementAvailabilityMiddleware(), recordManagementKeyRejections, s.mgmt.MiddlewareWithReadOnlyKey(insights.ViewerKeyMatches), func(c *gin.Context) {
+		c.Set(insights.ViewerAccessContextKey, c.GetBool(management.ReadOnlyAccessContextKey))
+	})
+	insights.RegisterRoutes(insightsGroup)
+
 	v8.GET("/credentials", s.mgmt.ListAuthFiles)
 	v8.POST("/credentials", s.mgmt.UploadAuthFileV8)
 	v8.DELETE("/credentials", s.mgmt.DeleteAuthFileV8)
@@ -66,4 +75,13 @@ func (s *Server) registerManagementV8Routes() {
 	v8.GET("/plugins/:id/quota", s.mgmt.GetPluginQuota)
 	v8.POST("/plugins/:id/quota", s.mgmt.FetchPluginQuota)
 	v8.DELETE("/plugins/:id/quota", s.mgmt.ResetPluginQuota)
+}
+
+// recordManagementKeyRejections notes management requests that the key check rejected, for the
+// insights errors view. It runs before the key check and inspects the result afterwards.
+func recordManagementKeyRejections(c *gin.Context) {
+	c.Next()
+	if c.IsAborted() && c.Writer.Status() == http.StatusUnauthorized {
+		insights.RecordAccessFailure(insights.AccessFailureManagementKey, http.StatusUnauthorized, c.ClientIP(), c.Request.URL.Path)
+	}
 }
