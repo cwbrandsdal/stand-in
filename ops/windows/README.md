@@ -132,9 +132,9 @@ other people's traffic through the hub.
 - **Quota pools**: pooled quota per provider with recorded history, a projection at the current burn rate with
   each account's resets, drain rate, and every account's current windows (5-hour where the plan has one, weekly,
   model-specific). A window an account stopped reporting is dropped once its period has ended and the account's
-  other windows have kept arriving for 6 hours; the account then shows "none reported since …". Verified Claude
-  Ultra accounts lost the 5-hour window on 30 October 2026, so Claude shows only weekly windows. The 5-hour
-  option appears only while some account still reports one.
+  other windows have kept arriving for 6 hours; the account then shows "none reported since …". Anthropic removed
+  the 5-hour window for verified Claude Ultra accounts from 30 October 2026 (Pro and Max keep it), so an Ultra
+  account shows only weekly windows. The 5-hour option appears only while some account still reports one.
 - **Usage**: tokens, requests, API value, cache hit rate and latency, by model, account, machine and tool, plus a
   weekday/hour heatmap.
 - **Accounts**: each account's share of its provider's traffic, API value, monthly pace against the plan price,

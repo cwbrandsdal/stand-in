@@ -31,8 +31,8 @@ const (
 	claudeSignalPrefix = "Anthropic-Ratelimit-Unified-"
 	codexSignalPrefix  = "X-Codex-"
 	// retiredWindowGap is how long a window may go unreported while the same account's other windows keep
-	// arriving before it counts as gone. Claude stopped sending the 5-hour window for verified Ultra accounts
-	// on 30 October 2026, for example; without this its last observation would linger as a current window.
+	// arriving before it counts as gone. Anthropic removed the 5-hour window for verified Claude Ultra accounts
+	// from 30 October 2026, for example; without this its last observation would linger as a current window.
 	retiredWindowGap = 6 * time.Hour
 )
 
