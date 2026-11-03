@@ -126,7 +126,9 @@ other people's traffic through the hub.
 
 ## Insights dashboard and database
 
-`http://<hub>:8317/insights` has these sections, top to bottom:
+`http://<hub>:8317/insights` (from the office LAN and the IKEv2 VPN also `https://insights.brandsdal.io`,
+through Caddy on Coruscant, which forwards only the dashboard routes; see
+`X:\10-Operations\server\caddy\runbooks\insights-https-lan-vpn-access.md`) has these sections, top to bottom:
 
 - **Alerts**: open alerts, most severe first (see [Alerts and Luna](#alerts-and-luna)).
 - **Quota pools**: pooled quota per provider with recorded history, a projection at the current burn rate with
