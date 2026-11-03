@@ -128,6 +128,8 @@ func buildCodexClientModelsWithToolCapabilities(models []map[string]any, provide
 			entry["slug"] = id
 			info := registry.LookupModelInfo(id)
 			applyCodexClientModelCapabilities(entry, id, metadataID, info, providersForModel, clientVersion)
+			// Before the provider capabilities, which clear service tiers for models that are not pure Codex.
+			applyCodexClientLiveSpeedTiers(entry, id, metadataID)
 			applyCodexClientDisplayName(entry, model)
 			applyCodexClientDescription(entry, model)
 			applyCodexClientBaseInstructions(entry, model)
