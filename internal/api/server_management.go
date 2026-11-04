@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/insights"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/managementasset"
 	log "github.com/sirupsen/logrus"
 )
@@ -307,6 +308,16 @@ func (s *Server) pluginResourceNoRoute(c *gin.Context) {
 		return
 	}
 	c.AbortWithStatus(http.StatusNotFound)
+}
+
+// serveInsightsDashboard serves the usage and quota insights page under the control panel's availability rules.
+func (s *Server) serveInsightsDashboard(c *gin.Context) {
+	cfg := s.getConfig()
+	if cfg == nil || cfg.Home.Enabled || cfg.RemoteManagement.DisableControlPanel {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	insights.ServeDashboard(c)
 }
 
 func (s *Server) serveManagementControlPanel(c *gin.Context) {

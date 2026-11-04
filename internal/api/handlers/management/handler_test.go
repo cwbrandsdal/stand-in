@@ -86,3 +86,65 @@ func TestMiddlewareSetsSupportPluginHeader(t *testing.T) {
 		}
 	})
 }
+
+func TestMiddlewareWithReadOnlyKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const readOnlyKey = "read-only-key"
+	newHandler := func(allowRemote bool) *Handler {
+		cfg := &config.Config{}
+		cfg.RemoteManagement.AllowRemote = allowRemote
+		return &Handler{cfg: cfg, failedAttempts: make(map[string]*attemptInfo), envSecret: "test-secret"}
+	}
+	readOnly := func(provided string) bool { return provided == readOnlyKey }
+	serve := func(middleware gin.HandlerFunc, remoteAddr, key string) (int, bool) {
+		engine := gin.New()
+		var readOnlyAccess bool
+		engine.GET("/v8/management/insights/status", middleware, func(c *gin.Context) {
+			readOnlyAccess = c.GetBool(ReadOnlyAccessContextKey)
+			c.Status(http.StatusOK)
+		})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/v8/management/insights/status", nil)
+		req.RemoteAddr = remoteAddr
+		req.Header.Set("Authorization", "Bearer "+key)
+		engine.ServeHTTP(rec, req)
+		return rec.Code, readOnlyAccess
+	}
+
+	t.Run("read-only key is accepted and marked", func(t *testing.T) {
+		h := newHandler(true)
+		if code, ro := serve(h.MiddlewareWithReadOnlyKey(readOnly), "192.0.2.10:1234", readOnlyKey); code != http.StatusOK || !ro {
+			t.Fatalf("status=%d readOnly=%v, want 200 true", code, ro)
+		}
+	})
+	t.Run("management key is not marked read-only", func(t *testing.T) {
+		h := newHandler(true)
+		if code, ro := serve(h.MiddlewareWithReadOnlyKey(readOnly), "192.0.2.10:1234", "test-secret"); code != http.StatusOK || ro {
+			t.Fatalf("status=%d readOnly=%v, want 200 false", code, ro)
+		}
+	})
+	t.Run("plain middleware rejects the read-only key", func(t *testing.T) {
+		h := newHandler(true)
+		if code, _ := serve(h.Middleware(), "192.0.2.10:1234", readOnlyKey); code != http.StatusUnauthorized {
+			t.Fatalf("status=%d, want 401", code)
+		}
+	})
+	t.Run("remote access rule applies", func(t *testing.T) {
+		h := newHandler(false)
+		if code, _ := serve(h.MiddlewareWithReadOnlyKey(readOnly), "192.0.2.10:1234", readOnlyKey); code != http.StatusForbidden {
+			t.Fatalf("status=%d, want 403", code)
+		}
+	})
+	t.Run("failure ban applies", func(t *testing.T) {
+		h := newHandler(true)
+		middleware := h.MiddlewareWithReadOnlyKey(readOnly)
+		for i := 0; i < 5; i++ {
+			if code, _ := serve(middleware, "192.0.2.10:1234", "wrong-key"); code != http.StatusUnauthorized {
+				t.Fatalf("attempt %d: status=%d, want 401", i+1, code)
+			}
+		}
+		if code, _ := serve(middleware, "192.0.2.10:1234", readOnlyKey); code != http.StatusForbidden {
+			t.Fatalf("read-only key during ban: status=%d, want 403", code)
+		}
+	})
+}

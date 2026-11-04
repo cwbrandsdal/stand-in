@@ -128,6 +128,8 @@ func buildCodexClientModelsWithToolCapabilities(models []map[string]any, provide
 			entry["slug"] = id
 			info := registry.LookupModelInfo(id)
 			applyCodexClientModelCapabilities(entry, id, metadataID, info, providersForModel, clientVersion)
+			// Before the provider capabilities, which clear service tiers for models that are not pure Codex.
+			applyCodexClientLiveSpeedTiers(entry, id, metadataID)
 			applyCodexClientDisplayName(entry, model)
 			applyCodexClientDescription(entry, model)
 			applyCodexClientBaseInstructions(entry, model)
@@ -573,6 +575,9 @@ func nullCodexClientRequiredOptions(entry map[string]any) {
 	entry["tool_mode"] = "direct"
 	entry["use_responses_lite"] = false
 	entry["supports_reasoning_effort_updates"] = false
+	if _, exists := entry["supports_image_detail_original"]; exists {
+		entry["supports_image_detail_original"] = false
+	}
 	entry["upgrade"] = nil
 	entry["availability_nux"] = nil
 }
@@ -772,7 +777,7 @@ func applyCodexClientInputModalitiesMetadata(entry map[string]any, modalities []
 	}
 	entry["input_modalities"] = codexModalities
 	if hasImageModality(codexModalities) {
-		entry["supports_image_detail_original"] = true
+		entry["supports_image_detail_original"] = false
 	} else {
 		delete(entry, "supports_image_detail_original")
 	}

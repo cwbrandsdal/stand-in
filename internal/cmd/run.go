@@ -12,6 +12,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/insights"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pluginhost"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
 	log "github.com/sirupsen/logrus"
@@ -61,6 +62,9 @@ func StartServiceWithPluginHost(cfg *config.Config, configPath string, localPass
 		return
 	}
 
+	if insightsService := insights.Start(configPath); insightsService != nil {
+		defer insightsService.Stop()
+	}
 	err = service.Run(runCtx)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		log.Errorf("proxy service exited with error: %v", err)
@@ -96,8 +100,10 @@ func StartServiceBackgroundWithPluginHost(cfg *config.Config, configPath string,
 		return cancelFn, doneCh
 	}
 
+	insightsService := insights.Start(configPath)
 	go func() {
 		defer close(doneCh)
+		defer insightsService.Stop()
 		if err := service.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			log.Errorf("proxy service exited with error: %v", err)
 		}

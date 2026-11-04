@@ -63,6 +63,7 @@ type Handler struct {
 	pluginReleases          pluginReleaseCache
 	siwcOAuthFactory        func(*config.Config) siwcOAuthService
 	siwcCommitMu            sync.Mutex
+	pluginLoginSaveMu       sync.Mutex
 }
 
 type configReloadSnapshot struct {
@@ -317,10 +318,26 @@ func (h *Handler) SetPostAuthPersistHook(hook coreauth.PostAuthHook) {
 	h.postAuthPersistHook = hook
 }
 
+// ReadOnlyAccessContextKey is set to true on requests that MiddlewareWithReadOnlyKey
+// admitted with a read-only key rather than the management key.
+const ReadOnlyAccessContextKey = "managementReadOnlyAccess"
+
 // Middleware enforces access control for management endpoints.
 // All requests (local and remote) require a valid management key.
 // Additionally, remote access requires allow-remote-management=true.
 func (h *Handler) Middleware() gin.HandlerFunc {
+	return h.middleware(nil)
+}
+
+// MiddlewareWithReadOnlyKey is Middleware for read-only routes that also accept a key
+// for which readOnly reports true. That key is subject to the same remote-access rule
+// and per-IP failure ban as the management key, and its requests carry
+// ReadOnlyAccessContextKey.
+func (h *Handler) MiddlewareWithReadOnlyKey(readOnly func(provided string) bool) gin.HandlerFunc {
+	return h.middleware(readOnly)
+}
+
+func (h *Handler) middleware(readOnly func(provided string) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-CPA-VERSION", buildinfo.Version)
 		c.Header("X-CPA-COMMIT", buildinfo.Commit)
@@ -344,10 +361,13 @@ func (h *Handler) Middleware() gin.HandlerFunc {
 			provided = c.GetHeader("X-Management-Key")
 		}
 
-		allowed, statusCode, errMsg := h.AuthenticateManagementKey(clientIP, localClient, provided)
+		allowed, readOnlyAccess, statusCode, errMsg := h.authenticate(clientIP, localClient, provided, readOnly)
 		if !allowed {
 			c.AbortWithStatusJSON(statusCode, gin.H{"error": errMsg})
 			return
+		}
+		if readOnlyAccess {
+			c.Set(ReadOnlyAccessContextKey, true)
 		}
 		c.Next()
 	}
@@ -356,11 +376,18 @@ func (h *Handler) Middleware() gin.HandlerFunc {
 // AuthenticateManagementKey verifies the provided management key for the given client.
 // It mirrors the behaviour of Middleware() so non-HTTP callers can reuse the same logic.
 func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, provided string) (bool, int, string) {
+	allowed, _, statusCode, errMsg := h.authenticate(clientIP, localClient, provided, nil)
+	return allowed, statusCode, errMsg
+}
+
+// authenticate implements AuthenticateManagementKey. When readOnly is set, a key it
+// accepts also authenticates and the second result reports read-only access.
+func (h *Handler) authenticate(clientIP string, localClient bool, provided string, readOnly func(string) bool) (bool, bool, int, string) {
 	const maxFailures = 5
 	const banDuration = 30 * time.Minute
 
 	if h == nil {
-		return false, http.StatusForbidden, "remote management disabled"
+		return false, false, http.StatusForbidden, "remote management disabled"
 	}
 
 	h.mu.Lock()
@@ -386,7 +413,7 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 		if now.Before(ai.blockedUntil) {
 			remaining := ai.blockedUntil.Sub(now).Round(time.Second)
 			h.attemptsMu.Unlock()
-			return false, http.StatusForbidden, fmt.Sprintf("IP banned due to too many failed attempts. Try again in %s", remaining)
+			return false, false, http.StatusForbidden, fmt.Sprintf("IP banned due to too many failed attempts. Try again in %s", remaining)
 		}
 		// Ban expired, reset state
 		ai.blockedUntil = time.Time{}
@@ -395,7 +422,7 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 	h.attemptsMu.Unlock()
 
 	if !localClient && !allowRemote {
-		return false, http.StatusForbidden, "remote management disabled"
+		return false, false, http.StatusForbidden, "remote management disabled"
 	}
 
 	fail := func() {
@@ -424,36 +451,43 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 	}
 
 	if secretHash == "" && envSecret == "" {
-		return false, http.StatusForbidden, "remote management key not set"
+		return false, false, http.StatusForbidden, "remote management key not set"
 	}
 
 	if provided == "" {
 		fail()
-		return false, http.StatusUnauthorized, "missing management key"
+		return false, false, http.StatusUnauthorized, "missing management key"
 	}
 
 	if localClient {
 		if lp := h.localPassword; lp != "" {
 			if subtle.ConstantTimeCompare([]byte(provided), []byte(lp)) == 1 {
 				reset()
-				return true, 0, ""
+				return true, false, 0, ""
 			}
 		}
 	}
 
 	if envSecret != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(envSecret)) == 1 {
 		reset()
-		return true, 0, ""
+		return true, false, 0, ""
+	}
+
+	// Checked before bcrypt, which is deliberately slow: read-only keys are high-entropy
+	// tokens compared by hash, and the dashboard sends several requests per refresh.
+	if readOnly != nil && readOnly(provided) {
+		reset()
+		return true, true, 0, ""
 	}
 
 	if secretHash == "" || bcrypt.CompareHashAndPassword([]byte(secretHash), []byte(provided)) != nil {
 		fail()
-		return false, http.StatusUnauthorized, "invalid management key"
+		return false, false, http.StatusUnauthorized, "invalid management key"
 	}
 
 	reset()
 
-	return true, 0, ""
+	return true, false, 0, ""
 }
 
 // persistLocked saves the current in-memory config to disk.

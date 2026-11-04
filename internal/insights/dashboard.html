@@ -1,0 +1,2043 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0d0d0d">
+<meta name="apple-mobile-web-app-title" content="Insights">
+<title>Insights · CLIProxyAPI</title>
+<script>
+  // Apply the saved theme before the first paint: dark (default), light, or auto (follow the device).
+  (function () {
+    var theme = "dark";
+    try { theme = JSON.parse(localStorage.getItem("insights.prefs") || "{}").theme || "dark"; } catch (_) {}
+    if (theme === "auto") theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+  })();
+</script>
+<style>
+.viz-root {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-raised: #222220;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --wash: rgba(255, 255, 255, 0.05);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-text: #0ca30c;
+  --seq: #0d366b, #104281, #184f95, #1c5cab, #256abf, #2a78d6, #3987e5, #5598e7, #6da7ec, #86b6ef;
+}
+/* Light theme: chosen on the page, or "Auto" on a device set to light. Dark is the default. */
+:root[data-theme="light"] .viz-root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-raised: #f3f3f0;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --wash: rgba(11, 11, 11, 0.04);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --good-text: #006300;
+  --seq: #cde2fb, #b7d3f6, #9ec5f4, #86b6ef, #6da7ec, #5598e7, #3987e5, #2a78d6, #256abf, #1c5cab;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: #0d0d0d; }
+:root[data-theme="light"] body { background: #f9f9f7; }
+.viz-root {
+  min-height: 100vh;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 20px 28px 48px;
+}
+h1, h2, h3 { margin: 0; font-weight: 600; }
+h1 { font-size: 22px; }
+h2 { font-size: 16px; margin: 32px 0 12px; }
+h3 { font-size: 15px; }
+button, select, input { font: inherit; color: inherit; }
+a { color: inherit; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.top .title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sub { color: var(--muted); font-size: 13px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.retired { color: var(--muted); font-size: 12px; }
+.btn {
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 12px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+}
+.btn:hover { background: var(--wash); }
+.btn.primary { background: var(--ink); color: var(--page); border-color: transparent; }
+.btn[aria-pressed="true"] { border-color: var(--ink-2); }
+.btn[hidden] { display: none; }
+.filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+  margin-top: 18px; padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.filter { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.filter[hidden] { display: none; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.seg button { background: none; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; color: var(--ink-2); }
+.seg button:hover { background: var(--wash); }
+.seg button[aria-pressed="true"] { background: var(--surface-raised); color: var(--ink); font-weight: 600; }
+select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; }
+.banner { margin-top: 16px; padding: 10px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+.banner[hidden] { display: none; }
+main.loading { opacity: 0.55; transition: opacity 120ms; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.card-head .name { display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.hero-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin: 10px 0 6px; }
+.hero { font-size: 48px; font-weight: 600; line-height: 1; letter-spacing: -0.02em; }
+.hero small { font-size: 15px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+.stats { display: flex; gap: 28px; flex-wrap: wrap; }
+.stat .k { color: var(--muted); font-size: 12px; }
+.stat .v { font-size: 14px; font-weight: 600; }
+.chart { position: relative; width: 100%; margin-top: 8px; }
+.chart svg { display: block; overflow: visible; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12px; margin-top: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.key-line { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+.key-line.dashed { border-top-style: dashed; }
+.key-rect { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+details.table-view { margin-top: 8px; }
+details.table-view summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.table-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; margin-top: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--surface); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:hover td { background: var(--wash); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.tile .k { color: var(--muted); font-size: 12px; }
+.tile .v { font-size: 24px; font-weight: 600; margin-top: 2px; }
+.tile .d { color: var(--ink-2); font-size: 12px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; }
+.accounts { margin-top: 14px; }
+.acct { display: grid; grid-template-columns: minmax(180px, 1.3fr) repeat(var(--cols, 2), minmax(150px, 1fr)); gap: 10px 20px; padding: 12px 0; border-top: 1px solid var(--grid); align-items: start; }
+.acct .who { min-width: 0; }
+.acct .who .label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct .who .meta { color: var(--muted); font-size: 12px; }
+.chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); margin-left: 6px; vertical-align: 1px; }
+.state { font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+.state .icon { font-weight: 700; }
+.meter .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.meter .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.meter .track { height: 6px; border-radius: 3px; background: var(--grid); margin: 5px 0 4px; overflow: hidden; }
+.meter .fill { height: 100%; border-radius: 3px; }
+.meter .when { font-size: 12px; color: var(--muted); }
+.bar-cell { min-width: 120px; }
+.bar-cell .bar { height: 6px; border-radius: 0 3px 3px 0; background: var(--series-1); }
+.tooltip {
+  position: fixed; z-index: 10; pointer-events: none; background: var(--surface-raised); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; min-width: 140px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.tooltip .t-title { color: var(--muted); margin-bottom: 4px; }
+.tooltip .t-row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.tooltip .t-row .t-name { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+.tooltip .t-row b { font-variant-numeric: tabular-nums; }
+.tooltip[hidden] { display: none; }
+.empty { color: var(--muted); padding: 18px 0; }
+dialog { background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: 12px; padding: 20px; max-width: 420px; }
+dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+dialog input { width: 100%; padding: 8px 10px; margin: 10px 0 14px; background: var(--page); border: 1px solid var(--border); border-radius: 8px; }
+dialog .error { margin-top: 10px; color: var(--critical); font-size: 13px; }
+dialog .error[hidden] { display: none; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+.ok { color: var(--good-text); }
+.btn.small { padding: 3px 9px; font-size: 12px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.alert { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--grid); align-items: start; }
+.alert:first-child { border-top: 0; }
+.alert .sev { font-weight: 700; text-align: center; }
+.alert .title { font-weight: 600; }
+.alert .body { color: var(--ink-2); font-size: 13px; }
+.alert .meta { color: var(--muted); font-size: 12px; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.alert.acked { opacity: 0.6; }
+.chip.warn { border-color: var(--serious); color: var(--serious); }
+.chip.bad { border-color: var(--critical); color: var(--critical); }
+tr.clickable { cursor: pointer; }
+tr.selected td { background: var(--wash); }
+td .link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline dotted; cursor: pointer; font: inherit; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px 18px; margin-top: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.field input, .price input { background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.price { display: inline-flex; gap: 6px; align-items: center; }
+.price input { width: 84px; padding: 3px 6px; }
+textarea.sql {
+  width: 100%; min-height: 120px; margin-top: 10px; background: var(--page); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; resize: vertical; font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.schema { margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.schema summary { cursor: pointer; color: var(--muted); }
+.schema code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+/* Phones: tighter spacing, two-column tiles and meters, larger tap targets. */
+@media (max-width: 640px) {
+  .viz-root { padding: 14px 12px 32px; }
+  h1 { font-size: 20px; }
+  h2 { margin: 24px 0 10px; }
+  .actions { width: 100%; }
+  .actions .btn { flex: 1 1 auto; justify-content: center; padding: 8px 10px; }
+  .filters { gap: 10px 14px; }
+  .filter { flex-wrap: wrap; }
+  .seg button { padding: 7px 10px; }
+  select { padding: 7px 8px; }
+  .card { padding: 14px 12px; border-radius: 10px; }
+  .hero { font-size: 36px; }
+  .stats { gap: 10px 20px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { padding: 10px 12px; }
+  .tile .v { font-size: 20px; }
+  .acct { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+  .acct .who { grid-column: 1 / -1; }
+  th, td { padding: 6px 8px; }
+  .table-wrap { max-height: 300px; }
+  .alert { grid-template-columns: 18px minmax(0, 1fr); }
+  .alert .meta { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
+  .row-actions .btn { flex: 1 1 auto; justify-content: center; }
+}
+@media (forced-colors: active) { .dot, .key-rect, .meter .fill, .bar-cell .bar { forced-color-adjust: none; } }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <header class="top">
+    <div class="title">
+      <h1>Insights</h1>
+      <span class="sub" id="hubStatus">Loading…</span>
+    </div>
+    <div class="actions">
+      <div class="seg" data-pref="theme" role="group" aria-label="Theme">
+        <button type="button" data-value="dark">Dark</button>
+        <button type="button" data-value="light">Light</button>
+        <button type="button" data-value="auto">Auto</button>
+      </div>
+      <a class="btn" id="managementLink" href="/management.html">Management</a>
+      <button class="btn" id="toggleEmails" type="button" aria-pressed="false">Show emails</button>
+      <button class="btn" id="signOut" type="button">Forget key</button>
+      <button class="btn primary" id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <nav class="filters" aria-label="Filters">
+    <div class="filter"><span>Range</span>
+      <div class="seg" data-pref="range" role="group" aria-label="Time range">
+        <button type="button" data-value="24h">24h</button>
+        <button type="button" data-value="7d">7 days</button>
+        <button type="button" data-value="30d">30 days</button>
+        <button type="button" data-value="90d">90 days</button>
+      </div>
+    </div>
+    <div class="filter" id="windowFilter"><span>Quota window</span>
+      <div class="seg" data-pref="window" role="group" aria-label="Quota window">
+        <button type="button" data-value="7d">Weekly</button>
+        <button type="button" data-value="5h">5-hour</button>
+      </div>
+    </div>
+    <div class="filter"><span>Quota view</span>
+      <div class="seg" data-pref="view" role="group" aria-label="Quota view">
+        <button type="button" data-value="remaining">Remaining</button>
+        <button type="button" data-value="drain">Drain rate</button>
+      </div>
+    </div>
+    <div class="filter"><span>Burn rate over</span>
+      <div class="seg" data-pref="burn" role="group" aria-label="Burn rate lookback">
+        <button type="button" data-value="1">1h</button>
+        <button type="button" data-value="3">3h</button>
+        <button type="button" data-value="6">6h</button>
+      </div>
+    </div>
+    <label class="filter">Future usage
+      <select id="future" aria-label="Future usage">
+        <option value="1">Same as now</option>
+        <option value="1.5">Heavier (1.5×)</option>
+        <option value="0.5">Lighter (0.5×)</option>
+      </select>
+    </label>
+  </nav>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <main id="main">
+    <h2>Alerts</h2>
+    <div class="card">
+      <div class="card-head">
+        <div class="sub" id="alertsSub">Loading…</div>
+        <button class="btn small" id="ackAll" type="button" hidden>Mark all seen</button>
+      </div>
+      <div id="alerts"></div>
+    </div>
+
+    <h2>Quota pools</h2>
+    <div id="pools"></div>
+
+    <h2>Usage</h2>
+    <div class="tiles" id="tiles"></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Tokens</h3>
+        <div class="chart" id="tokensChart"></div>
+        <div class="legend" id="tokensLegend"></div>
+        <details class="table-view"><summary>Table view</summary><div class="table-wrap" id="tokensTable"></div></details>
+      </div>
+      <div class="card">
+        <h3>Requests</h3>
+        <div class="chart" id="requestsChart"></div>
+        <div class="legend" id="requestsLegend"></div>
+        <details class="table-view"><summary>Table view</summary><div class="table-wrap" id="requestsTable"></div></details>
+      </div>
+    </div>
+    <div class="card">
+      <h3>By model</h3>
+      <div class="table-wrap" id="byModel"></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>By account</h3>
+        <div class="table-wrap" id="byAccount"></div>
+      </div>
+      <div class="card">
+        <h3>By machine and tool</h3>
+        <div class="table-wrap" id="byClient"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>When you work</h3>
+      <div class="sub">Requests by weekday and hour, local time</div>
+      <div class="chart" id="heatmap"></div>
+      <details class="table-view"><summary>Table view</summary><div class="table-wrap" id="heatTable"></div></details>
+    </div>
+
+    <h2>Accounts</h2>
+    <div class="tiles" id="accountTiles"></div>
+    <div class="card">
+      <h3>Plans and value</h3>
+      <div class="sub">API value prices every request at the provider's public API list price. The monthly pace extrapolates the last 30 days, or the recorded days for a new account; above 1× a plan is worth more than it costs.</div>
+      <div class="table-wrap" id="accountsTable"></div>
+    </div>
+    <div class="grid-2" id="accountCharts"></div>
+    <div class="card">
+      <h3>Account moves</h3>
+      <div class="sub">A session that moves to another account of the same provider pays to write its prompt cache again. Failover moves follow a failed request; affinity moves follow an idle gap longer than the affinity TTL.</div>
+      <div class="table-wrap" id="movesTable"></div>
+    </div>
+
+    <h2>Waste</h2>
+    <div class="tiles" id="wasteTiles"></div>
+    <div class="card">
+      <h3>Large first cache writes</h3>
+      <div class="sub" id="firstWritesSub"></div>
+      <div class="table-wrap" id="firstWrites"></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Cache written again after an idle gap</h3>
+        <div class="sub" id="idleSub"></div>
+        <div class="table-wrap" id="idleRewrites"></div>
+      </div>
+      <div class="card">
+        <h3>Fast-mode refusals</h3>
+        <div class="sub">Claude answers fast-mode requests from an account without usage credits with a 429; the tool then retries at standard speed. Turn fast mode off in that tool.</div>
+        <div class="table-wrap" id="fastMode"></div>
+      </div>
+    </div>
+
+    <h2>Threads</h2>
+    <div class="card">
+      <div class="card-head">
+        <div class="sub">Agent threads (client sessions) active in the range. Select one for its requests.</div>
+        <div class="seg" id="threadSort" role="group" aria-label="Sort threads">
+          <button type="button" data-value="cost">Most expensive</button>
+          <button type="button" data-value="recent">Most recent</button>
+        </div>
+      </div>
+      <div class="table-wrap" id="threads"></div>
+    </div>
+    <div class="card" id="threadDetail" hidden>
+      <div class="detail-head">
+        <div>
+          <h3 id="threadTitle">Thread</h3>
+          <div class="sub" id="threadSub"></div>
+        </div>
+        <button class="btn small" id="threadClose" type="button">Close</button>
+      </div>
+      <div class="stats" id="threadStats" style="margin-top:10px"></div>
+      <div class="chart" id="threadChart"></div>
+      <div class="legend" id="threadLegend"></div>
+      <div class="table-wrap" id="threadRequests"></div>
+    </div>
+
+    <h2>Errors and latency</h2>
+    <div class="tiles" id="errorTiles"></div>
+    <div class="card">
+      <h3>Failures by cause</h3>
+      <div class="chart" id="errorsChart"></div>
+      <div class="legend" id="errorsLegend"></div>
+      <div class="table-wrap" id="errorsTable"></div>
+    </div>
+    <div class="card">
+      <h3>Response times by model</h3>
+      <div class="sub">Percentiles of successful requests. Time to first token is when the first streamed bytes arrived.</div>
+      <div class="table-wrap" id="latencyTable"></div>
+    </div>
+    <div class="card">
+      <h3>Rejected keys</h3>
+      <div class="sub">Requests with a missing or wrong client key, and insights or management sign-ins with a wrong key. Keys are never stored.</div>
+      <div class="table-wrap" id="accessFailures"></div>
+    </div>
+
+    <h2>Session affinity</h2>
+    <div class="tiles" id="sessionTiles"></div>
+    <div class="card">
+      <div class="sub">A session that moves between accounts loses its prompt cache and pays cache writes again. Each session should stay on one account.</div>
+      <div class="table-wrap" id="sessions"></div>
+    </div>
+
+    <h2>Recent requests</h2>
+    <div class="card">
+      <div class="table-wrap" id="recent"></div>
+    </div>
+
+    <h2>Data and settings</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Alert settings</h3>
+        <div class="sub" id="pushStatus"></div>
+        <form id="alertForm">
+          <div class="form-grid">
+            <label class="field">Alert when a quota window reaches (%)
+              <input type="number" id="setQuotaPct" min="0" max="100" step="1" required>
+            </label>
+            <label class="field">Warn on projected run-out from (%)
+              <input type="number" id="setProjection" min="0" max="100" step="1" required>
+            </label>
+            <label class="field">Fast-mode refusals per hour before alerting
+              <input type="number" id="setFastMode" min="0" max="100000" step="1" required>
+            </label>
+          </div>
+          <div class="form-grid">
+            <label class="check"><input type="checkbox" id="setWaste"> Raise waste alerts</label>
+            <label class="check"><input type="checkbox" id="setLunaLimits"> Send limit and sign-in alerts to Luna</label>
+            <label class="check"><input type="checkbox" id="setLunaWaste"> Send fast-mode refusal alerts to Luna</label>
+          </div>
+          <div class="note">0 turns a check off. Projections use the burn rate of the last hour for 5-hour windows and the last 6 hours for weekly windows. Luna speaks critical alerts (limit reached, sign-in failing) at the next pause in a call or pushes them to the iPhone, and batches warnings. Large first cache writes and account moves stay here; Luna's drive brief summarizes them.</div>
+          <div class="row-actions">
+            <button class="btn primary" type="submit" id="saveAlerts">Save</button>
+            <button class="btn" type="button" id="testPush">Send test alert to Luna</button>
+            <span class="sub" id="alertFormStatus" role="status"></span>
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Backups and prices</h3>
+        <div class="stats" id="dataStats" style="margin-top:10px"></div>
+        <div class="note" id="dataNote"></div>
+        <div class="row-actions">
+          <button class="btn" type="button" id="backupNow">Back up now</button>
+          <span class="sub" id="backupStatus" role="status"></span>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="sqlCard">
+      <h3>SQL console</h3>
+      <div class="sub">One read-only SELECT at a time, at most 1,000 rows. Times are Unix milliseconds (ts_ms); <span class="mono">datetime(ts_ms/1000, 'unixepoch', 'localtime')</span> shows them in local time.</div>
+      <textarea class="sql" id="sqlInput" spellcheck="false" aria-label="SQL query"></textarea>
+      <div class="row-actions">
+        <button class="btn primary" type="button" id="sqlRun">Run</button>
+        <select id="sqlExamples" aria-label="Example queries"><option value="">Examples…</option></select>
+        <span class="sub" id="sqlStatus" role="status"></span>
+      </div>
+      <details class="schema"><summary>Tables and columns</summary><div id="sqlSchema"></div></details>
+      <div class="table-wrap" id="sqlResult" style="max-height:480px"></div>
+    </div>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+
+  <dialog id="keyDialog">
+    <form method="dialog" id="keyForm">
+      <h3>Access key</h3>
+      <div class="sub">Enter the read-only insights key, or the management key on a trusted computer. The key is kept in this browser's local storage and sent only to this hub.</div>
+      <div class="error" id="keyError" role="alert" hidden></div>
+      <input type="password" id="keyInput" autocomplete="current-password" required aria-label="Access key">
+      <button class="btn primary" type="submit">Continue</button>
+    </form>
+  </dialog>
+</div>
+
+<script>
+"use strict";
+(function () {
+  const HOUR = 3600e3, DAY = 24 * HOUR;
+  // Narrowest chart drawn; card contents on a 360px phone are about 310px wide.
+  const MIN_CHART_WIDTH = 240;
+  const RANGES = { "24h": DAY, "7d": 7 * DAY, "30d": 30 * DAY, "90d": 90 * DAY };
+  const PROVIDER_SLOT = { codex: 1, claude: 2, antigravity: 3, gemini: 3, vertex: 3, xai: 4, kimi: 5, devin: 6, meta: 7 };
+  const PROVIDER_NAME = { claude: "Claude", codex: "Codex", antigravity: "Antigravity", gemini: "Gemini", vertex: "Vertex", xai: "xAI", kimi: "Kimi", devin: "Devin", meta: "Muse (Meta)" };
+  const TOKEN_KEYS = [
+    { key: "cache_read_tokens", label: "Cache read", slot: 1 },
+    { key: "input_tokens", label: "Uncached input", slot: 2 },
+    { key: "cache_write_tokens", label: "Cache write", slot: 3 },
+    { key: "output_tokens", label: "Output", slot: 4 },
+  ];
+  const ERROR_CLASSES = {
+    fast_mode: { label: "Fast mode refused", slot: 4 },
+    rate_limit: { label: "Rate limited", slot: 2 },
+    overloaded: { label: "Overloaded", slot: 6 },
+    upstream_auth: { label: "Sign-in failed", slot: 8 },
+    context_length: { label: "Context too long", slot: 5 },
+    model_not_found: { label: "Unknown model", slot: 3 },
+    bad_request: { label: "Bad request", slot: 3 },
+    client_cancelled: { label: "Cancelled by client", slot: 1 },
+    stream_truncated: { label: "Stream cut off", slot: 5 },
+    upstream_error: { label: "Upstream error", slot: 7 },
+    other: { label: "Other", slot: 1 },
+  };
+  const SQL_EXAMPLES = [
+    { label: "API value per machine and tool, last 7 days", sql: "SELECT client_ip, client_kind, COUNT(*) AS requests, ROUND(SUM(cost_usd), 2) AS api_usd\nFROM requests\nWHERE ts_ms >= (strftime('%s', 'now') - 7 * 86400) * 1000\nGROUP BY 1, 2\nORDER BY api_usd DESC" },
+    { label: "Daily API value and tokens by provider", sql: "SELECT date(ts_ms / 1000, 'unixepoch', 'localtime') AS day, provider,\n  ROUND(SUM(cost_usd), 2) AS api_usd, SUM(total_tokens) AS tokens\nFROM requests\nGROUP BY 1, 2\nORDER BY 1 DESC, 2" },
+    { label: "Most expensive threads", sql: "SELECT session_id, MAX(client_kind) AS tool, MAX(client_ip) AS machine, COUNT(*) AS requests,\n  ROUND(SUM(cost_usd), 2) AS api_usd, datetime(MAX(ts_ms) / 1000, 'unixepoch', 'localtime') AS last_active\nFROM requests\nWHERE session_id <> ''\nGROUP BY 1\nORDER BY api_usd DESC\nLIMIT 25" },
+    { label: "Failures by cause", sql: "SELECT error_class, provider, status_code, COUNT(*) AS n,\n  datetime(MAX(ts_ms) / 1000, 'unixepoch', 'localtime') AS last\nFROM requests\nWHERE failed = 1\nGROUP BY 1, 2, 3\nORDER BY n DESC" },
+    { label: "Hourly cache hit rate", sql: "SELECT strftime('%Y-%m-%d %H:00', ts_ms / 1000, 'unixepoch', 'localtime') AS hour,\n  ROUND(100.0 * SUM(cache_read_tokens) / NULLIF(SUM(input_tokens + cache_read_tokens + cache_write_tokens), 0), 1) AS cache_hit_pct,\n  COUNT(*) AS requests\nFROM requests\nGROUP BY 1\nORDER BY 1 DESC\nLIMIT 48" },
+    { label: "Quota observations", sql: "SELECT datetime(ts_ms / 1000, 'unixepoch', 'localtime') AS observed, auth_id, window_key, used_pct,\n  datetime(resets_at_ms / 1000, 'unixepoch', 'localtime') AS resets\nFROM quota_samples\nORDER BY ts_ms DESC\nLIMIT 200" },
+    { label: "Alerts", sql: "SELECT datetime(ts_ms / 1000, 'unixepoch', 'localtime') AS raised, kind, severity, title, push_status AS luna,\n  datetime(resolved_ms / 1000, 'unixepoch', 'localtime') AS resolved\nFROM alerts\nORDER BY id DESC\nLIMIT 100" },
+  ];
+  const SIM_HORIZON = 14 * DAY;
+  const SIM_STEP = 15 * 60e3;
+  const NS = "http://www.w3.org/2000/svg";
+
+  const $ = (id) => document.getElementById(id);
+  const prefs = Object.assign({ range: "7d", window: "7d", view: "remaining", burn: "3", future: "1", emails: false, threadSort: "cost", theme: "dark" },
+    safeParse(localStorage.getItem("insights.prefs")));
+  let data = null;
+  let loadSeq = 0;
+  let openThread = null;
+  let threadSeq = 0;
+  let settingsDirty = false;
+  let schemaLoaded = false;
+  const openTables = new Set();
+
+  function safeParse(raw) { try { return JSON.parse(raw) || {}; } catch (_) { return {}; } }
+  function savePrefs() { localStorage.setItem("insights.prefs", JSON.stringify(prefs)); }
+  function applyTheme() {
+    const light = prefs.theme === "light" || (prefs.theme === "auto" && matchMedia("(prefers-color-scheme: light)").matches);
+    document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", light ? "#f9f9f7" : "#0d0d0d");
+  }
+  function css(name) { return getComputedStyle($("main")).getPropertyValue(name).trim(); }
+  function slotColor(slot) { return css("--series-" + slot); }
+  function providerColor(p) { return slotColor(PROVIDER_SLOT[p] || 8); }
+  function providerName(p) { return PROVIDER_NAME[p] || p || "Unknown"; }
+
+  // ---------- formatting ----------
+  const nf = new Intl.NumberFormat();
+  function fmtInt(v) { return nf.format(Math.round(v || 0)); }
+  function compact(v) {
+    v = v || 0;
+    const a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(a >= 1e10 ? 0 : 1) + "B";
+    if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M";
+    if (a >= 1e3) return (v / 1e3).toFixed(a >= 1e4 ? 0 : 1) + "K";
+    return String(Math.round(v));
+  }
+  function pct(v, digits) { return (Number.isFinite(v) ? v : 0).toFixed(digits == null ? 0 : digits) + "%"; }
+  function ratio(n, d) { return d > 0 ? (n / d) * 100 : 0; }
+  function dur(ms) {
+    if (!(ms > 0)) return "now";
+    const m = Math.round(ms / 60e3);
+    if (m < 60) return m + "m";
+    const h = Math.floor(m / 60), mm = m % 60;
+    if (h < 24) return h + "h" + (mm ? " " + mm + "m" : "");
+    const d = Math.floor(h / 24), hh = h % 24;
+    return d + "d" + (hh ? " " + hh + "h" : "");
+  }
+  function ms(v) { return v >= 1000 ? (v / 1000).toFixed(1) + "s" : Math.round(v) + "ms"; }
+  function spent(v) { return v >= 60e3 ? dur(v) : ms(v); }
+  function fmtUSD(v) {
+    v = v || 0;
+    const a = Math.abs(v);
+    if (a >= 1e4) return "$" + compact(v);
+    if (a >= 100) return "$" + nf.format(Math.round(v));
+    if (a >= 1 || a === 0) return "$" + v.toFixed(2);
+    return "$" + v.toFixed(a >= 0.01 ? 2 : 3);
+  }
+  function errorLabel(c) { return (ERROR_CLASSES[c] || { label: c || "Other" }).label; }
+  function errorColor(c) { return slotColor((ERROR_CLASSES[c] || ERROR_CLASSES.other).slot); }
+  // Masks every email address inside free text, such as alert messages.
+  function maskText(s) { return prefs.emails ? s || "" : String(s || "").replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, maskEmail); }
+  const dtWeekday = new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  const dtFull = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const dtWeekdayOnly = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+  const dtDay = { format: (t) => dtWeekdayOnly.format(t) + " " + new Date(t).getDate() };
+  const dtHour = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+  function when(t) { return Math.abs(t - Date.now()) < 6 * DAY ? dtWeekday.format(t) : dtFull.format(t); }
+  function maskEmail(s) {
+    if (prefs.emails || !s || s.indexOf("@") < 0) return s || "";
+    const [user, domain] = s.split("@");
+    const parts = domain.split(".");
+    const tld = parts.length > 1 ? "." + parts.pop() : "";
+    return user.slice(0, 2) + "•••@" + parts.join(".").slice(0, 1) + "•••" + tld;
+  }
+  function hostName(ip) {
+    const labels = (data && data.status && data.status.host_labels) || {};
+    return labels[ip] || ip || "unknown";
+  }
+
+  // ---------- DOM helpers ----------
+  function el(tag, attrs, children) {
+    const e = document.createElement(tag);
+    if (attrs) for (const k in attrs) {
+      if (k === "text") e.textContent = attrs[k];
+      else if (k === "style") e.style.cssText = attrs[k];
+      else if (k === "class") e.className = attrs[k];
+      else e.setAttribute(k, attrs[k]);
+    }
+    if (children) for (const c of children) if (c != null) e.append(c);
+    return e;
+  }
+  function svg(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    if (attrs) for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function dot(color) { return el("span", { class: "dot", style: "background:" + color }); }
+
+  // ---------- tooltip ----------
+  const tip = $("tooltip");
+  function showTip(evt, title, rows) {
+    tip.textContent = "";
+    tip.append(el("div", { class: "t-title", text: title }));
+    for (const r of rows) {
+      const name = el("span", { class: "t-name" });
+      if (r.color) name.append(el("span", { class: "key-line" + (r.dashed ? " dashed" : ""), style: "border-color:" + r.color }));
+      name.append(document.createTextNode(r.name));
+      tip.append(el("div", { class: "t-row" }, [name, el("b", { text: r.value })]));
+    }
+    tip.hidden = false;
+    const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    if (x + w > innerWidth - 8) x = evt.clientX - w - pad;
+    if (y + h > innerHeight - 8) y = evt.clientY - h - pad;
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+  function hideTip() { tip.hidden = true; }
+  // Touch pointers leave as soon as the finger lifts, which would hide a tooltip right after a tap.
+  const isTouch = (evt) => evt && evt.pointerType === "touch";
+
+  // ---------- table helper ----------
+  // onRow makes rows selectable; selected marks the selected row.
+  function table(host, columns, rows, emptyText, onRow, selected) {
+    host.textContent = "";
+    if (!rows.length) { host.append(el("div", { class: "empty", text: emptyText || "No data in this range." })); return; }
+    const thead = el("thead", null, [el("tr", null, columns.map((c) => el("th", { class: c.num ? "num" : "", text: c.label })))]);
+    const tbody = el("tbody");
+    for (const r of rows) {
+      const tr = el("tr", null, columns.map((c) => {
+        const v = c.get(r);
+        const td = el("td", { class: (c.num ? "num " : "") + (c.cls || "") });
+        if (v instanceof Node) td.append(v); else td.textContent = v == null ? "" : String(v);
+        return td;
+      }));
+      if (onRow) {
+        tr.className = "clickable" + (selected && selected(r) ? " selected" : "");
+        tr.tabIndex = 0;
+        tr.addEventListener("click", (evt) => { if (!evt.target.closest("button, input, a")) onRow(r); });
+        tr.addEventListener("keydown", (evt) => { if (evt.key === "Enter") onRow(r); });
+      }
+      tbody.append(tr);
+    }
+    host.append(el("table", null, [thead, tbody]));
+  }
+
+  // ---------- scales ----------
+  function niceMax(v) {
+    if (!(v > 0)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+    return 10 * p;
+  }
+  function timeTicks(x0, x1, maxTicks) {
+    const steps = [HOUR, 3 * HOUR, 6 * HOUR, 12 * HOUR, DAY, 2 * DAY, 7 * DAY, 14 * DAY, 30 * DAY];
+    const step = steps.find((s) => (x1 - x0) / s <= maxTicks) || 30 * DAY;
+    const out = [];
+    if (step >= DAY) {
+      // Walk local calendar days so daylight-saving changes keep ticks on midnight.
+      const d = new Date(x0);
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() < x0) d.setDate(d.getDate() + 1);
+      for (; d.getTime() <= x1; d.setDate(d.getDate() + step / DAY)) out.push(d.getTime());
+    } else {
+      const d = new Date(x0);
+      d.setMinutes(0, 0, 0);
+      while (d.getTime() < x0 || d.getHours() % (step / HOUR) !== 0) d.setHours(d.getHours() + 1);
+      for (; d.getTime() <= x1; d.setHours(d.getHours() + step / HOUR)) out.push(d.getTime());
+    }
+    return { ticks: out, step };
+  }
+  function tickLabel(t, step) { return step >= DAY ? dtDay.format(t) : dtHour.format(t); }
+
+  // ---------- line chart ----------
+  function lineChart(host, o) {
+    host.textContent = "";
+    const W = Math.max(MIN_CHART_WIDTH, host.clientWidth), H = o.height || 240;
+    const m = { l: 48, r: 18, t: 22, b: 26 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const x = (t) => m.l + ((t - o.x0) / (o.x1 - o.x0)) * pw;
+    const y = (v) => m.t + (1 - (v - o.y0) / (o.y1 - o.y0)) * ph;
+    const root = svg("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": o.aria }, host);
+    const yTicks = o.yTicks || [o.y0, (o.y0 + o.y1) / 2, o.y1];
+    for (const v of yTicks) {
+      svg("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: v === o.y0 ? css("--axis") : css("--grid"), "stroke-width": 1 }, root);
+      const lbl = svg("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = o.yFmt(v);
+    }
+    const { ticks, step } = timeTicks(o.x0, o.x1, Math.max(3, Math.floor(pw / 90)));
+    for (const t of ticks) {
+      const lbl = svg("text", { x: x(t), y: H - 6, "text-anchor": "middle", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = tickLabel(t, step);
+    }
+    for (const s of o.series) {
+      if (s.points.length < 1) continue;
+      const d = s.points.map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1)).join("");
+      if (s.area) {
+        const first = s.points[0], last = s.points[s.points.length - 1];
+        svg("path", { d: d + "L" + x(last[0]).toFixed(1) + " " + y(o.y0) + "L" + x(first[0]).toFixed(1) + " " + y(o.y0) + "Z", fill: s.color, opacity: 0.1 }, root);
+      }
+      svg("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": s.dashed ? "5 4" : null }, root);
+    }
+    if (o.now >= o.x0 && o.now <= o.x1) {
+      svg("line", { x1: x(o.now), x2: x(o.now), y1: m.t - 6, y2: H - m.b, stroke: css("--muted"), "stroke-width": 1 }, root);
+      const lbl = svg("text", { x: x(o.now), y: m.t - 10, "text-anchor": "middle", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = "Now";
+    }
+    for (const a of o.annotations || []) {
+      if (a.t < o.x0 || a.t > o.x1) continue;
+      if (a.dot) {
+        svg("circle", { cx: x(a.t), cy: y(a.v), r: 5, fill: a.color, stroke: css("--surface"), "stroke-width": 2 }, root);
+      }
+      const lbl = svg("text", { x: x(a.t), y: y(a.v) - 9, "text-anchor": a.anchor || "middle", fill: css("--ink-2"), "font-size": 11 }, root);
+      lbl.textContent = a.label;
+    }
+    // Crosshair: snaps to the nearest x among all series points.
+    const xs = [];
+    for (const s of o.series) for (const p of s.points) xs.push(p[0]);
+    xs.sort((a, b) => a - b);
+    if (!xs.length) return;
+    const hair = svg("line", { y1: m.t, y2: H - m.b, stroke: css("--ink-2"), "stroke-width": 1, visibility: "hidden" }, root);
+    const hit = svg("rect", { x: m.l, y: 0, width: pw, height: H, fill: "transparent", tabindex: 0 }, root);
+    const at = (s, t) => {
+      // A series only reports values inside its own time span (recorded ends at now, projected starts there).
+      if (!s.points.length || t < s.points[0][0] || t > s.points[s.points.length - 1][0]) return null;
+      let v = null;
+      for (const p of s.points) { if (p[0] <= t) v = p[1]; else break; }
+      return v;
+    };
+    const move = (evt) => {
+      const rect = root.getBoundingClientRect();
+      const t = o.x0 + ((evt.clientX - rect.left - m.l) / pw) * (o.x1 - o.x0);
+      let best = xs[0];
+      for (const v of xs) if (Math.abs(v - t) < Math.abs(best - t)) best = v;
+      hair.setAttribute("x1", x(best)); hair.setAttribute("x2", x(best)); hair.setAttribute("visibility", "visible");
+      const rows = [];
+      for (const s of o.series) {
+        const v = at(s, best);
+        if (v != null) rows.push({ name: s.name, value: o.yFmt(v, true), color: s.color, dashed: s.dashed });
+      }
+      showTip(evt, dtFull.format(best), rows);
+    };
+    hit.addEventListener("pointermove", move);
+    hit.addEventListener("pointerdown", move);
+    hit.addEventListener("pointerleave", (evt) => { if (isTouch(evt)) return; hair.setAttribute("visibility", "hidden"); hideTip(); });
+  }
+
+  // ---------- column chart (stacked) ----------
+  function columnChart(host, o) {
+    host.textContent = "";
+    const W = Math.max(MIN_CHART_WIDTH, host.clientWidth), H = o.height || 220;
+    const m = { l: 48, r: 12, t: 12, b: 26 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const n = Math.max(1, Math.round((o.x1 - o.x0) / o.bucketMs));
+    const slot = pw / n;
+    const bw = Math.max(2, Math.min(24, slot * 0.72));
+    const totals = o.buckets.map((b) => o.keys.reduce((s, k) => s + (b.values[k.key] || 0), 0));
+    const yMax = niceMax(Math.max(0, ...totals));
+    const y = (v) => m.t + (1 - v / yMax) * ph;
+    const x = (t) => m.l + ((t - o.x0) / (o.x1 - o.x0)) * pw;
+    const root = svg("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": o.aria }, host);
+    for (const v of [0, yMax / 2, yMax]) {
+      svg("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: v === 0 ? css("--axis") : css("--grid"), "stroke-width": 1 }, root);
+      const lbl = svg("text", { x: m.l - 8, y: y(v) + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = o.yFmt(v);
+    }
+    const { ticks, step } = timeTicks(o.x0, o.x1, Math.max(3, Math.floor(pw / 90)));
+    for (const t of ticks) {
+      const lbl = svg("text", { x: x(t), y: H - 6, "text-anchor": "middle", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = tickLabel(t, step);
+    }
+    const colors = o.keys.map((k) => k.color);
+    o.buckets.forEach((b, i) => {
+      const cx = x(b.t + o.bucketMs / 2);
+      const g = svg("g", null, root);
+      let acc = 0;
+      const segs = o.keys.map((k, ki) => ({ v: b.values[k.key] || 0, color: colors[ki] })).filter((s) => s.v > 0);
+      segs.forEach((s, si) => {
+        const y0 = y(acc), y1 = y(acc + s.v);
+        acc += s.v;
+        const gap = si > 0 ? 2 : 0;
+        const h = Math.max(0, y0 - y1 - gap);
+        if (h <= 0) return;
+        const top = si === segs.length - 1;
+        const r = top ? Math.min(4, h, bw / 2) : 0;
+        const left = cx - bw / 2, right = cx + bw / 2, bottom = y0 - gap, topY = bottom - h;
+        const d = "M" + left + " " + bottom + "V" + (topY + r) + (r ? "Q" + left + " " + topY + " " + (left + r) + " " + topY + "H" + (right - r) + "Q" + right + " " + topY + " " + right + " " + (topY + r) : "H" + right) + "V" + bottom + "Z";
+        svg("path", { d, fill: s.color }, g);
+      });
+      const hit = svg("rect", { x: cx - slot / 2, y: m.t, width: slot, height: ph, fill: "transparent", tabindex: 0 }, root);
+      const show = (evt) => {
+        g.setAttribute("opacity", "0.8");
+        const rows = o.keys.map((k, ki) => ({ name: k.label, value: o.yFmt(b.values[k.key] || 0, true), color: colors[ki] }));
+        if (o.keys.length > 1) rows.push({ name: "Total", value: o.yFmt(totals[i], true) });
+        showTip(evt, (o.bucketMs >= DAY ? dtDay.format(b.t) : dtFull.format(b.t)), rows);
+      };
+      hit.addEventListener("pointermove", show);
+      hit.addEventListener("pointerdown", show);
+      hit.addEventListener("pointerleave", (evt) => { if (isTouch(evt)) return; g.removeAttribute("opacity"); hideTip(); });
+    });
+  }
+
+  function legend(host, items) {
+    host.textContent = "";
+    for (const it of items) {
+      host.append(el("span", null, [
+        el("span", { class: it.line ? "key-line" + (it.dashed ? " dashed" : "") : "key-rect", style: (it.line ? "border-color:" : "background:") + it.color }),
+        document.createTextNode(it.label),
+      ]));
+    }
+  }
+
+  // ---------- quota model ----------
+  function windowMs(key, minutes) {
+    if (minutes > 0) return minutes * 60e3;
+    const base = String(key).split(":").pop().split("_")[0];
+    if (base === "5h") return 5 * HOUR;
+    return 7 * DAY;
+  }
+  function windowMatches(key, wanted) {
+    const base = String(key).split(":").pop();
+    return wanted === "5h" ? base === "5h" : base === "7d";
+  }
+  // Windows an account no longer reports, such as Claude's 5-hour window on verified Ultra accounts.
+  function retiredKeys(a) { return new Set((a.retired_windows || []).map((w) => w.key)); }
+  function accountWindowKeys(a) {
+    const retired = retiredKeys(a);
+    const keys = new Set((a.windows || []).map((w) => w.key));
+    for (const k in data.quota.history[a.auth_id] || {}) if (!retired.has(k)) keys.add(k);
+    return keys;
+  }
+  function hasShortWindows() {
+    return data.quota.accounts.some((a) => !a.disabled && a.present && [...accountWindowKeys(a)].some((k) => windowMatches(k, "5h")));
+  }
+  // The window the pools show: the chosen one, or weekly when no active account reports a 5-hour window.
+  function quotaWindow() { return prefs.window === "5h" && !hasShortWindows() ? "7d" : prefs.window; }
+
+  // members of a provider pool for one window key; each has sorted samples [{t, used, resets}].
+  function poolMembers(provider, windowKey) {
+    const out = [];
+    for (const a of data.quota.accounts) {
+      if (a.provider !== provider || a.disabled || !a.present || retiredKeys(a).has(windowKey)) continue;
+      const live = (a.windows || []).find((w) => w.key === windowKey);
+      const hist = ((data.quota.history[a.auth_id] || {})[windowKey] || []).map((p) => ({ t: p[0], used: p[1], resets: p[2] }));
+      if (live && live.observed_at && (!hist.length || live.observed_at > hist[hist.length - 1].t)) {
+        hist.push({ t: live.observed_at, used: live.used_pct, resets: live.resets_at });
+      }
+      if (!hist.length) continue;
+      out.push({ account: a, live, samples: hist, windowMs: windowMs(windowKey, live && live.window_minutes) });
+    }
+    return out;
+  }
+  function remainingAt(mbr, t) {
+    const s = mbr.samples;
+    let cur = s[0];
+    for (const p of s) { if (p.t <= t) cur = p; else break; }
+    let rem = 100 - cur.used;
+    if (cur.t <= t && cur.resets > 0 && t >= cur.resets) rem = 100;
+    return Math.max(0, Math.min(100, rem));
+  }
+  function recordedSeries(members, from, now) {
+    if (!members.length) return [];
+    const start = Math.max(from, Math.min(...members.map((m) => m.samples[0].t)));
+    const times = new Set([start, now]);
+    for (const m of members) for (const p of m.samples) {
+      if (p.t >= start && p.t <= now) times.add(p.t);
+      if (p.resets > start && p.resets <= now) { times.add(p.resets - 1); times.add(p.resets); }
+    }
+    return [...times].sort((a, b) => a - b).map((t) => [t, members.reduce((s, m) => s + remainingAt(m, t), 0)]);
+  }
+  // Burn in pool percentage points per hour over the lookback window.
+  function burnRate(members, now, lookbackMs) {
+    let total = 0, earliest = now;
+    for (const m of members) {
+      const s = m.samples;
+      for (let i = 1; i < s.length; i++) {
+        if (s[i].t < now - lookbackMs || s[i].t > now) continue;
+        earliest = Math.min(earliest, s[i - 1].t);
+        total += usageDelta(s[i - 1], s[i]);
+      }
+    }
+    const span = Math.min(lookbackMs, Math.max(now - earliest, HOUR / 4));
+    return total / (span / HOUR);
+  }
+  function usageDelta(a, b) {
+    const rolled = (a.resets > 0 && b.t >= a.resets) || (a.resets > 0 && b.resets > a.resets + 60e3);
+    if (rolled) return Math.max(0, b.used);
+    return Math.max(0, b.used - a.used);
+  }
+  function drainBuckets(members, from, now, bucketMs) {
+    const n = Math.max(1, Math.ceil((now - from) / bucketMs));
+    const sums = new Array(n).fill(0);
+    for (const m of members) {
+      const s = m.samples;
+      for (let i = 1; i < s.length; i++) {
+        if (s[i].t < from || s[i].t > now) continue;
+        sums[Math.min(n - 1, Math.floor((s[i].t - from) / bucketMs))] += usageDelta(s[i - 1], s[i]);
+      }
+    }
+    return sums.map((v, i) => ({ t: from + i * bucketMs, values: { drain: v / (bucketMs / HOUR) } }));
+  }
+  // Projects the pool forward: burn spreads evenly over accounts with quota left; each account refills at its reset.
+  function simulate(members, now, burnPerHour) {
+    const accts = members.map((m) => {
+      let resets = 0;
+      const last = m.samples[m.samples.length - 1];
+      if (last.resets > 0) { resets = last.resets; while (resets <= now) resets += m.windowMs; }
+      return { m, rem: remainingAt(m, now), resets, emptyAt: 0 };
+    });
+    const points = [[now, accts.reduce((s, a) => s + a.rem, 0)]];
+    const resets = [];
+    let firstEmpty = null, poolEmpty = 0;
+    for (const a of accts) if (a.rem <= 0.01 && !firstEmpty) firstEmpty = { a, t: now };
+    for (let t = now + SIM_STEP; t <= now + SIM_HORIZON; t += SIM_STEP) {
+      const due = [];
+      for (const a of accts) {
+        while (a.resets > 0 && a.resets <= t) { due.push({ a, t: a.resets }); a.resets += a.m.windowMs; }
+      }
+      due.sort((p, q) => p.t - q.t);
+      for (const d of due) {
+        const before = accts.reduce((s, x) => s + x.rem, 0);
+        const gain = 100 - d.a.rem;
+        d.a.rem = 100;
+        d.a.emptyAt = 0;
+        if (gain > 0.5) {
+          points.push([d.t, before], [d.t, before + gain]);
+          resets.push({ t: d.t, gain, v: before + gain, a: d.a });
+        }
+      }
+      const active = accts.filter((a) => a.rem > 0.01);
+      if (active.length) {
+        let need = (burnPerHour * SIM_STEP) / HOUR;
+        // Distribute evenly, spilling what an exhausted account cannot absorb onto the others.
+        let pool = active.slice();
+        while (need > 1e-9 && pool.length) {
+          const share = need / pool.length;
+          const next = [];
+          for (const a of pool) {
+            const take = Math.min(a.rem, share);
+            a.rem -= take; need -= take;
+            if (a.rem > 0.01) next.push(a);
+            else if (!a.emptyAt) { a.emptyAt = t; if (!firstEmpty) firstEmpty = { a, t }; }
+          }
+          pool = next;
+        }
+      }
+      const total = accts.reduce((s, a) => s + a.rem, 0);
+      if (!poolEmpty && total <= 0.5) poolEmpty = t;
+      points.push([t, total]);
+    }
+    return { points, resets, firstEmpty, poolEmpty };
+  }
+
+  // ---------- render: quota pools ----------
+  function renderPools() {
+    const host = $("pools");
+    host.textContent = "";
+    $("windowFilter").hidden = !hasShortWindows();
+    const now = data.quota.now;
+    const span = RANGES[prefs.range];
+    const from = now - span;
+    const providers = [...new Set(data.quota.accounts.map((a) => a.provider))].sort((a, b) => (PROVIDER_SLOT[a] || 9) - (PROVIDER_SLOT[b] || 9));
+    if (!providers.length) {
+      host.append(el("div", { class: "card empty", text: "No Claude or Codex accounts yet. Sign accounts in on the hub; quota appears after their first request." }));
+      return;
+    }
+    for (const provider of providers) {
+      const { card, draw } = poolCard(provider, from, now, span);
+      host.append(card);
+      draw();
+    }
+  }
+
+  function poolCard(provider, from, now, span) {
+    const color = providerColor(provider);
+    const accounts = data.quota.accounts.filter((a) => a.provider === provider);
+    const keys = new Set();
+    for (const a of accounts) for (const k of accountWindowKeys(a)) keys.add(k);
+    const wanted = quotaWindow();
+    const windowKey = [...keys].find((k) => !k.includes(":") && windowMatches(k, wanted)) || [...keys].find((k) => windowMatches(k, wanted));
+    const card = el("div", { class: "card" });
+    const active = accounts.filter((a) => !a.disabled);
+    card.append(el("div", { class: "card-head" }, [
+      el("div", { class: "name" }, [dot(color), el("h3", { text: providerName(provider) }),
+        el("span", { class: "sub", text: active.length + (active.length === 1 ? " account" : " accounts") })]),
+      el("span", { class: "sub", text: windowKey ? windowLabel(provider, windowKey) + " window" : "" }),
+    ]));
+    if (!windowKey) {
+      card.append(el("div", { class: "empty", text: "No " + (wanted === "5h" ? "5-hour" : "weekly") + " quota observed yet for " + providerName(provider) + "." }));
+      card.append(accountList(provider, accounts, keys, now));
+      return { card, draw: () => {} };
+    }
+    const members = poolMembers(provider, windowKey);
+    if (!members.length) {
+      card.append(el("div", { class: "empty", text: "No active " + providerName(provider) + " account has reported this window yet." }));
+      card.append(accountList(provider, accounts, keys, now));
+      return { card, draw: () => {} };
+    }
+    const capacity = members.length * 100;
+    const remaining = members.reduce((s, m) => s + remainingAt(m, now), 0);
+    const measuredBurn = burnRate(members, now, Number(prefs.burn) * HOUR);
+    const burn = measuredBurn * Number(prefs.future);
+    const sim = simulate(members, now, burn);
+    const nextReset = sim.resets[0];
+    card.append(el("div", { class: "hero-row" }, [
+      el("div", { class: "hero" }, [document.createTextNode(pct(remaining)), el("small", { text: "left of " + pct(capacity) })]),
+      el("div", { class: "stats" }, [
+        stat("Pool empty", !sim.poolEmpty ? "Not within 14 days" : sim.poolEmpty - now <= SIM_STEP ? "Empty now" : when(sim.poolEmpty)),
+        stat("First empty", !sim.firstEmpty ? "None within 14 days" : maskEmail(sim.firstEmpty.a.m.account.label) +
+          (sim.firstEmpty.t <= now ? " is empty now" : " in " + dur(sim.firstEmpty.t - now))),
+        stat("Next reset", nextReset ? "+" + pct(nextReset.gain) + " · " + when(nextReset.t) : "Unknown"),
+        stat("Burn, last " + prefs.burn + "h", measuredBurn.toFixed(1) + "%/h" + (prefs.future !== "1" ? " · projecting ×" + prefs.future : "")),
+      ]),
+    ]));
+
+    const chartHost = el("div", { class: "chart" });
+    card.append(chartHost);
+    const legendHost = el("div", { class: "legend" });
+    card.append(legendHost);
+    const tableHost = el("div", { class: "table-wrap" });
+    const details = el("details", { class: "table-view" }, [el("summary", { text: "Table view" }), tableHost]);
+    details.open = openTables.has(provider);
+    details.addEventListener("toggle", () => { if (details.open) openTables.add(provider); else openTables.delete(provider); });
+    card.append(details);
+    const horizon = Math.min(span, windowMatches(windowKey, "5h") ? 12 * HOUR : 7 * DAY);
+    const draw = () => {
+      if (prefs.view === "drain") {
+        const bucketMs = span <= 2 * DAY ? HOUR : span <= 8 * DAY ? 3 * HOUR : DAY;
+        const buckets = drainBuckets(members, from, now, bucketMs);
+        columnChart(chartHost, {
+          buckets, bucketMs, x0: from, x1: from + buckets.length * bucketMs,
+          keys: [{ key: "drain", label: "Drain", color }],
+          yFmt: (v) => v.toFixed(v < 10 ? 1 : 0) + "%/h", aria: providerName(provider) + " quota drain rate", height: 220,
+        });
+        legend(legendHost, [{ label: "Pool drain, % per hour (resets excluded)", color }]);
+        table(tableHost, [
+          { label: "Bucket start", get: (b) => dtFull.format(b.t) },
+          { label: "Drain %/h", num: true, get: (b) => b.values.drain.toFixed(2) },
+        ], buckets.filter((b) => b.values.drain > 0));
+        return;
+      }
+      const recorded = recordedSeries(members, from, now);
+      const projected = sim.points.filter((p) => p[0] <= now + horizon);
+      const annotations = sim.resets.filter((r) => r.t <= now + horizon).map((r) => ({ t: r.t, v: r.v, label: "+" + pct(r.gain) }));
+      if (sim.poolEmpty && sim.poolEmpty <= now + horizon) annotations.push({ t: sim.poolEmpty, v: 0, dot: true, color, label: "Empty " + when(sim.poolEmpty), anchor: "end" });
+      lineChart(chartHost, {
+        x0: Math.min(from, recorded.length ? recorded[0][0] : from), x1: now + horizon, y0: 0, y1: Math.max(100, capacity), now,
+        yTicks: [0, capacity / 2, capacity], yFmt: (v) => pct(v), height: 260,
+        aria: providerName(provider) + " pooled quota remaining, recorded and projected",
+        series: [
+          { name: "Recorded", points: recorded, color, area: true },
+          { name: "Projected", points: projected, color, dashed: true },
+        ],
+        annotations,
+      });
+      legend(legendHost, [{ label: "Recorded", color, line: true }, { label: "Projected at current burn", color, line: true, dashed: true }]);
+      table(tableHost, [
+        { label: "Time", get: (p) => dtFull.format(p[0]) },
+        { label: "Remaining", num: true, get: (p) => pct(p[1], 1) },
+        { label: "Kind", get: (p) => (p[0] > now ? "projected" : "recorded") },
+      ], thin(recorded, 240).concat(thin(projected.slice(1), 120)));
+    };
+    card.append(accountList(provider, accounts, keys, now));
+    return { card, draw };
+  }
+
+  function thin(points, max) {
+    if (points.length <= max) return points;
+    const k = Math.ceil(points.length / max);
+    return points.filter((_, i) => i % k === 0 || i === points.length - 1);
+  }
+
+  function stat(k, v) { return el("div", { class: "stat" }, [el("div", { class: "k", text: k }), el("div", { class: "v", text: v })]); }
+
+  function windowLabel(provider, key) {
+    return (data.quota.window_labels || {})[provider + "|" + key] || key;
+  }
+
+  function accountList(provider, accounts, keys, now) {
+    const ordered = [...keys].sort((a, b) => rankKey(a) - rankKey(b) || a.localeCompare(b)).slice(0, 4);
+    const host = el("div", { class: "accounts" });
+    const usage = new Map(((data.summary && data.summary.by_account) || []).map((r) => [r.auth_id, r]));
+    for (const a of accounts) {
+      const row = el("div", { class: "acct", style: "--cols:" + Math.max(1, ordered.length) });
+      const u = usage.get(a.auth_id);
+      const meta = [];
+      if (u) meta.push(fmtInt(u.requests) + " requests · " + compact(u.total_tokens) + " tokens in range");
+      const lastObserved = Math.max(0, ...(a.windows || []).map((w) => w.observed_at || 0));
+      if (lastObserved) meta.push("quota seen " + dur(now - lastObserved) + " ago");
+      const retired = (a.retired_windows || []).map((w) => w.label + " limit: none reported since " + when(w.last_seen));
+      row.append(el("div", { class: "who" }, [
+        el("div", { class: "label", title: maskEmail(a.label) }, [document.createTextNode(maskEmail(a.label)), a.plan ? el("span", { class: "chip", text: a.plan }) : null]),
+        accountState(a, now),
+        el("div", { class: "meta", text: meta.join(" · ") }),
+        retired.length ? el("div", { class: "retired", text: retired.join(" · ") }) : null,
+      ]));
+      for (const key of ordered) row.append(meter(a, key, provider, now));
+      host.append(row);
+    }
+    return host;
+  }
+  function rankKey(k) { return k === "5h" ? 0 : k === "7d" ? 1 : k.startsWith("7d_") ? 2 : k.includes(":") ? 4 : 3; }
+
+  function accountState(a, now) {
+    let icon = "✓", text = "Available", color = css("--good-text");
+    if (a.disabled) { icon = "–"; text = "Disabled"; color = css("--muted"); }
+    else if (!a.present) { icon = "–"; text = "Removed from hub"; color = css("--muted"); }
+    else if (a.next_retry_at && a.next_retry_at > now) { icon = "!"; text = "Back in " + dur(a.next_retry_at - now); color = css("--critical"); }
+    else if (a.unavailable) { icon = "!"; text = "Unavailable"; color = css("--serious"); }
+    const blocked = (a.blocked_models || []).map((b) => b.model + " back in " + dur(b.until - now));
+    const box = el("div", { class: "state" }, [el("span", { class: "icon", style: "color:" + color, text: icon }), el("span", { text })]);
+    if (blocked.length) box.append(el("span", { class: "sub", text: " · " + blocked.join(", ") }));
+    return box;
+  }
+
+  function meter(a, key, provider, now) {
+    const w = (a.windows || []).find((x) => x.key === key);
+    const hist = (data.quota.history[a.auth_id] || {})[key];
+    let used = null, resets = 0;
+    if (w) { used = w.used_pct; resets = w.resets_at; }
+    else if (hist && hist.length) { const p = hist[hist.length - 1]; used = p[1]; resets = p[2]; }
+    const box = el("div", { class: "meter" });
+    if (used == null) {
+      box.append(el("div", { class: "row" }, [el("span", { text: windowLabel(provider, key) }), el("b", { text: "—" })]));
+      box.append(el("div", { class: "when", text: "Not reported" }));
+      return box;
+    }
+    let left = Math.max(0, 100 - used);
+    if (resets > 0 && resets <= now) left = 100;
+    const sev = left < 10 ? "--critical" : left < 30 ? "--warning" : "--good";
+    box.append(el("div", { class: "row" }, [el("span", { text: windowLabel(provider, key) }), el("b", { text: pct(left) + " left" })]));
+    box.append(el("div", { class: "track" }, [el("div", { class: "fill", style: "width:" + left + "%;background:" + css(sev) })]));
+    const whenText = resets > now ? "resets in " + dur(resets - now) + " · " + when(resets) : resets > 0 ? "reset " + dur(now - resets) + " ago" : "no reset reported";
+    box.append(el("div", { class: "when", text: whenText }));
+    return box;
+  }
+
+  // ---------- render: usage ----------
+  function renderUsage() {
+    const s = data.summary;
+    const t = s.totals;
+    const inputAll = t.input_tokens + t.cache_read_tokens + t.cache_write_tokens;
+    const tiles = $("tiles");
+    tiles.textContent = "";
+    const tile = (k, v, d) => el("div", { class: "tile" }, [el("div", { class: "k", text: k }), el("div", { class: "v", text: v }), el("div", { class: "d", text: d || "" })]);
+    tiles.append(
+      tile("Requests", fmtInt(t.requests), t.failed ? fmtInt(t.failed) + " failed (" + pct(ratio(t.failed, t.requests), 1) + ")" : "no failures"),
+      tile("Total tokens", compact(t.total_tokens), compact(inputAll) + " in · " + compact(t.output_tokens) + " out"),
+      tile("API value", fmtUSD(t.cost_usd), "at API list prices" + (t.unpriced ? " · " + fmtInt(t.unpriced) + " unpriced" : "")),
+      tile("Cache hit rate", pct(ratio(t.cache_read_tokens, inputAll), 1), "share of input served from cache"),
+      tile("Cache writes", pct(ratio(t.cache_write_tokens, inputAll), 1), compact(t.cache_write_tokens) + " tokens written"),
+      tile("Time to first token", t.avg_ttft_ms ? ms(t.avg_ttft_ms) : "—", "average, streamed requests"),
+      tile("Latency", t.avg_latency_ms ? ms(t.avg_latency_ms) : "—", "average request duration"),
+    );
+
+    const series = s.series || [];
+    const keys = TOKEN_KEYS.map((k) => ({ key: k.key, label: k.label, color: slotColor(k.slot) }));
+    const buckets = series.map((p) => ({ t: p.t, values: p }));
+    const x0 = Math.floor((s.from + tzOffsetMs()) / s.bucket_ms) * s.bucket_ms - tzOffsetMs();
+    columnChart($("tokensChart"), { buckets, keys, bucketMs: s.bucket_ms, x0, x1: s.to, yFmt: (v) => compact(v), aria: "Tokens per bucket by type" });
+    legend($("tokensLegend"), keys);
+    table($("tokensTable"), [{ label: "Bucket", get: (p) => dtFull.format(p.t) }].concat(TOKEN_KEYS.map((k) => ({ label: k.label, num: true, get: (p) => fmtInt(p[k.key]) }))), series);
+
+    const reqKeys = [{ key: "requests", label: "Successful", color: slotColor(1) }, { key: "failed", label: "Failed", color: slotColor(2) }];
+    const reqBuckets = series.map((p) => ({ t: p.t, values: { requests: p.requests - p.failed, failed: p.failed } }));
+    columnChart($("requestsChart"), { buckets: reqBuckets, keys: reqKeys, bucketMs: s.bucket_ms, x0, x1: s.to, yFmt: (v) => compact(v), aria: "Requests per bucket" });
+    legend($("requestsLegend"), reqKeys);
+    table($("requestsTable"), [
+      { label: "Bucket", get: (p) => dtFull.format(p.t) },
+      { label: "Requests", num: true, get: (p) => fmtInt(p.requests) },
+      { label: "Failed", num: true, get: (p) => fmtInt(p.failed) },
+    ], series);
+
+    const maxTokens = (rows) => Math.max(1, ...rows.map((r) => r.total_tokens));
+    const bar = (v, max, color) => el("div", { class: "bar-cell" }, [el("div", { class: "bar", style: "width:" + Math.max(1, (v / max) * 100) + "%;background:" + (color || slotColor(1)) })]);
+    const common = (max) => [
+      { label: "Requests", num: true, get: (r) => fmtInt(r.requests) },
+      { label: "Tokens", num: true, get: (r) => compact(r.total_tokens) },
+      { label: "", get: (r) => bar(r.total_tokens, max, r.provider ? providerColor(r.provider) : null) },
+      { label: "API value", num: true, get: (r) => fmtUSD(r.cost_usd) },
+      { label: "Cache hit", num: true, get: (r) => pct(ratio(r.cache_read_tokens, r.input_tokens + r.cache_read_tokens + r.cache_write_tokens), 1) },
+      { label: "Output", num: true, get: (r) => compact(r.output_tokens) },
+      { label: "TTFT", num: true, get: (r) => (r.avg_ttft_ms ? ms(r.avg_ttft_ms) : "—") },
+      { label: "Failed", num: true, get: (r) => (r.failed ? fmtInt(r.failed) : "0") },
+    ];
+    const withDot = (provider, text) => el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, [dot(providerColor(provider)), document.createTextNode(text)]);
+    const byModel = s.by_model || [];
+    table($("byModel"), [
+      { label: "Model", get: (r) => withDot(r.provider, r.model || "unknown") },
+      { label: "Provider", get: (r) => providerName(r.provider) },
+    ].concat(common(maxTokens(byModel))), byModel);
+    const byAccount = s.by_account || [];
+    table($("byAccount"), [
+      { label: "Account", get: (r) => withDot(r.provider, maskEmail(r.account) || r.auth_id || "unknown") },
+    ].concat(common(maxTokens(byAccount))), byAccount);
+    const byClient = s.by_client || [];
+    table($("byClient"), [
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Tool", get: (r) => r.client_kind || "unknown" },
+      { label: "Key", get: (r) => r.api_key_label || "—" },
+    ].concat(common(maxTokens(byClient)).filter((c) => c.label !== "")), byClient);
+
+    renderHeatmap(s.heatmap || []);
+  }
+
+  function tzOffsetMs() { return -new Date().getTimezoneOffset() * 60e3; }
+
+  function renderHeatmap(cells) {
+    const host = $("heatmap");
+    host.textContent = "";
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const grid = days.map(() => new Array(24).fill(null));
+    let max = 0;
+    for (const c of cells) {
+      const row = (c.weekday + 6) % 7;
+      grid[row][c.hour] = c;
+      max = Math.max(max, c.requests);
+    }
+    const ramp = css("--seq").split(",").map((v) => v.trim());
+    const W = Math.max(MIN_CHART_WIDTH, host.clientWidth), cellGap = 2, left = 40, top = 18;
+    const cw = (W - left) / 24, ch = Math.min(26, cw);
+    const H = top + 7 * ch + 4;
+    const root = svg("svg", { width: W, height: H, viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Requests by weekday and hour" }, host);
+    for (let h = 0; h < 24; h += 3) {
+      const lbl = svg("text", { x: left + h * cw + cw / 2, y: 12, "text-anchor": "middle", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = String(h).padStart(2, "0");
+    }
+    days.forEach((d, r) => {
+      const lbl = svg("text", { x: left - 8, y: top + r * ch + ch / 2 + 4, "text-anchor": "end", fill: css("--muted"), "font-size": 11 }, root);
+      lbl.textContent = d;
+      for (let h = 0; h < 24; h++) {
+        const c = grid[r][h];
+        const v = c ? c.requests : 0;
+        const fill = v > 0 ? ramp[Math.min(ramp.length - 1, Math.floor((v / max) * (ramp.length - 1) + 0.0001))] : css("--grid");
+        const rect = svg("rect", { x: left + h * cw + cellGap / 2, y: top + r * ch + cellGap / 2, width: cw - cellGap, height: ch - cellGap, rx: 3, fill, tabindex: 0 }, root);
+        const showCell = (evt) => showTip(evt, d + " " + String(h).padStart(2, "0") + ":00", [
+          { name: "Requests", value: fmtInt(v) }, { name: "Tokens", value: compact(c ? c.total_tokens : 0) }]);
+        rect.addEventListener("pointermove", showCell);
+        rect.addEventListener("pointerdown", showCell);
+        rect.addEventListener("pointerleave", (evt) => { if (!isTouch(evt)) hideTip(); });
+      }
+    });
+    table($("heatTable"), [{ label: "Day", get: (r) => r.d }].concat([...Array(24).keys()].map((h) => ({ label: String(h).padStart(2, "0"), num: true, get: (r) => (r.cells[h] ? fmtInt(r.cells[h].requests) : "") }))),
+      days.map((d, i) => ({ d, cells: grid[i] })));
+  }
+
+  // ---------- render: sessions & requests ----------
+  function renderSessions() {
+    const s = data.sessions;
+    const tiles = $("sessionTiles");
+    tiles.textContent = "";
+    const hopped = s.hopped_sessions || 0;
+    const tile = (k, v, d) => el("div", { class: "tile" }, [el("div", { class: "k", text: k }), el("div", { class: "v", text: v }), el("div", { class: "d", text: d || "" })]);
+    tiles.append(
+      tile("Sessions", fmtInt(s.sessions), "with at least one successful request"),
+      tile("Moved between accounts", fmtInt(hopped), pct(ratio(hopped, s.sessions), 1) + " of sessions" + (hopped ? " · each move re-writes the cache" : " · affinity is holding")),
+    );
+    table($("sessions"), [
+      { label: "Last active", get: (r) => when(r.last_ms) },
+      { label: "Session", cls: "mono", get: (r) => r.session_id.slice(0, 8) },
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Tool", get: (r) => r.client_kind },
+      { label: "Model", get: (r) => r.model },
+      { label: "Requests", num: true, get: (r) => fmtInt(r.requests) },
+      { label: "Accounts", get: (r) => r.accounts > 1
+        ? el("span", { class: "state" }, [el("span", { class: "icon", style: "color:" + css("--serious"), text: "!" }), document.createTextNode(r.accounts + " · moved")])
+        : el("span", { class: "state" }, [el("span", { class: "icon", style: "color:" + css("--good-text"), text: "✓" }), document.createTextNode("1")]) },
+      { label: "Cache hit", num: true, get: (r) => pct(ratio(r.cache_read_tokens, r.input_tokens + r.cache_read_tokens + r.cache_write_tokens), 1) },
+      { label: "Cache write", num: true, get: (r) => compact(r.cache_write_tokens) },
+      { label: "Output", num: true, get: (r) => compact(r.output_tokens) },
+    ], s.rows || [], "No sessions in this range.");
+  }
+
+  function renderRecent() {
+    table($("recent"), [
+      { label: "Time", get: (r) => dtFull.format(r.ts) },
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Tool", get: (r) => r.client_kind },
+      { label: "Model", get: (r) => el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, [dot(providerColor(r.provider)), document.createTextNode(r.model || "unknown")]) },
+      { label: "Account", get: (r) => maskEmail(r.account) },
+      { label: "Status", get: statusCell },
+      { label: "TTFT", num: true, get: (r) => (r.ttft_ms ? ms(r.ttft_ms) : "—") },
+      { label: "Duration", num: true, get: (r) => (r.latency_ms ? ms(r.latency_ms) : "—") },
+      { label: "Input", num: true, get: (r) => compact(r.input_tokens) },
+      { label: "Cache read", num: true, get: (r) => compact(r.cache_read_tokens) },
+      { label: "Cache write", num: true, get: (r) => compact(r.cache_write_tokens) },
+      { label: "Output", num: true, get: (r) => compact(r.output_tokens) },
+      { label: "API value", num: true, get: (r) => (r.cost_usd == null ? "—" : fmtUSD(r.cost_usd)) },
+      { label: "Effort", get: (r) => [r.reasoning_effort, r.service_tier && r.service_tier !== "auto" ? r.service_tier : ""].filter(Boolean).join(" · ") },
+    ], data.requests.requests || [], "No requests recorded yet.");
+  }
+
+  function statusCell(r) {
+    if (!r.failed) return el("span", { class: "state" }, [el("span", { class: "icon", style: "color:" + css("--good-text"), text: "✓" }), document.createTextNode(String(r.status_code || 200))]);
+    return el("span", { class: "state", title: errorLabel(r.error_class) }, [
+      el("span", { class: "icon", style: "color:" + css("--critical"), text: "✕" }),
+      document.createTextNode(String(r.status_code) + (r.error_class ? " · " + errorLabel(r.error_class).toLowerCase() : "")),
+    ]);
+  }
+  function withDot(provider, text) {
+    return el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, [dot(providerColor(provider)), document.createTextNode(text)]);
+  }
+  function tile(k, v, d) { return el("div", { class: "tile" }, [el("div", { class: "k", text: k }), el("div", { class: "v", text: v }), el("div", { class: "d", text: d || "" })]); }
+  function sum(rows, get) { return (rows || []).reduce((s, r) => s + (get(r) || 0), 0); }
+  function chip(text, kind, title) { return el("span", { class: "chip" + (kind ? " " + kind : ""), text, title: title || "" }); }
+  function threadLink(sessionId) {
+    if (!sessionId) return "";
+    const b = el("button", { class: "link mono", type: "button", text: sessionId.slice(0, 8), title: "Show this thread" });
+    b.addEventListener("click", () => showThread({ session_id: sessionId }));
+    return b;
+  }
+  function accountName(r) { return maskEmail(r.account || r.label) || r.auth_id || "unknown"; }
+  function canManage() { return data && data.status && data.status.access !== "viewer"; }
+
+  // ---------- render: alerts ----------
+  const SEVERITY = { critical: { icon: "✕", color: "--critical" }, warning: { icon: "!", color: "--serious" }, info: { icon: "i", color: "--muted" } };
+  function renderAlerts() {
+    const a = data.alerts || { alerts: [], luna: {} };
+    const host = $("alerts");
+    host.textContent = "";
+    const manage = canManage();
+    const list = a.alerts || [];
+    const weekAgo = Date.now() - 7 * DAY;
+    const rank = { critical: 0, warning: 1, info: 2 };
+    // Open alerts list the most severe first, newest first within a severity.
+    const open = list.filter((x) => !x.acked_ms && !x.resolved_ms && x.ts >= weekAgo).sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3) || b.ts - a.ts);
+    const rest = list.filter((x) => !open.includes(x));
+    const luna = a.luna && a.luna.configured ? "limit alerts go to Luna" : "not connected to Luna";
+    $("alertsSub").textContent = (open.length ? open.length + " open" : "No open alerts") + " · " + luna;
+    $("ackAll").hidden = !manage || !open.length;
+    if (!list.length) {
+      host.append(el("div", { class: "empty", text: "No alerts yet. Quota, sign-in and waste checks run every minute." }));
+      return;
+    }
+    for (const x of open.slice(0, 25)) host.append(alertItem(x, manage));
+    if (!open.length) host.append(el("div", { class: "empty", text: "Nothing needs attention." }));
+    if (rest.length) {
+      const more = el("details", { class: "table-view" }, [el("summary", { text: "Earlier and seen alerts (" + rest.length + ")" })]);
+      for (const x of rest) more.append(alertItem(x, false));
+      host.append(more);
+    }
+  }
+  function alertItem(x, manage) {
+    const sev = SEVERITY[x.severity] || SEVERITY.info;
+    const meta = el("div", { class: "meta" }, [el("span", { text: when(x.ts) })]);
+    if (x.resolved_ms) meta.append(chip("resolved " + when(x.resolved_ms)));
+    if (x.push_status === "sent") meta.append(chip("sent to Luna"));
+    else if (x.push_status === "failed") meta.append(chip("Luna unreachable", "bad", x.push_error));
+    else if (x.push_status === "pending") meta.append(chip("waiting for Luna", "", x.push_error));
+    if (manage && !x.acked_ms) {
+      const b = el("button", { class: "btn small", type: "button", text: "Seen" });
+      b.addEventListener("click", () => ackAlerts({ id: x.id }, b));
+      meta.append(b);
+    }
+    return el("div", { class: "alert" + (x.acked_ms ? " acked" : "") }, [
+      el("span", { class: "sev", style: "color:" + css(sev.color), text: sev.icon, title: x.severity }),
+      el("div", null, [el("div", { class: "title", text: maskText(x.title) }), el("div", { class: "body", text: maskText(x.body) })]),
+      meta,
+    ]);
+  }
+  async function ackAlerts(body, button) {
+    if (button) button.disabled = true;
+    try {
+      await apiSend("POST", "alerts/ack", body);
+      data.alerts = await api("alerts", { limit: 100 });
+      renderAlerts();
+      renderStatus();
+    } catch (err) {
+      banner("Could not update alerts: " + err.message);
+      if (button) button.disabled = false;
+    }
+  }
+
+  // ---------- render: accounts ----------
+  function monthlyPace(a) {
+    const days = Math.min(30, Math.max(1, a.coverage_days || 0));
+    return (a.cost_30d_usd || 0) / days * 30;
+  }
+  // The most used window that has not reset yet: live windows first, else the latest stored observations.
+  function closestWindow(authId, provider, now) {
+    const q = ((data.quota && data.quota.accounts) || []).find((x) => x.auth_id === authId);
+    let windows = (q && q.windows) || [];
+    if (!windows.length) {
+      const hist = (data.quota && data.quota.history && data.quota.history[authId]) || {};
+      const retired = q ? retiredKeys(q) : new Set();
+      windows = Object.keys(hist).filter((key) => !retired.has(key)).map((key) => {
+        const p = hist[key][hist[key].length - 1];
+        return { key, label: windowLabel(provider, key), used_pct: p[1], resets_at: p[2] };
+      });
+    }
+    let best = null;
+    for (const w of windows) {
+      if (w.resets_at && w.resets_at <= now) continue;
+      if (!best || w.used_pct > best.used_pct) best = w;
+    }
+    return best;
+  }
+  function renderAccounts() {
+    const r = data.accounts || {};
+    const accounts = r.accounts || [];
+    const now = Date.now();
+    const manage = canManage();
+    const providers = [...new Set(accounts.map((a) => a.provider))];
+    const tiles = $("accountTiles");
+    tiles.textContent = "";
+    for (const p of providers) {
+      const rows = accounts.filter((a) => a.provider === p);
+      const pace = sum(rows, monthlyPace);
+      const priced = rows.filter((a) => a.monthly_usd != null);
+      const plans = sum(priced, (a) => a.monthly_usd);
+      const d = priced.length === rows.length && plans > 0
+        ? (pace / plans).toFixed(1) + "× the " + fmtUSD(plans) + " in plans"
+        : "set a plan price below to compare";
+      tiles.append(tile(providerName(p) + " · " + rows.length + (rows.length === 1 ? " account" : " accounts"), fmtUSD(pace) + "/mo", "API value pace · " + d));
+    }
+    const moves = r.moves || [];
+    const failovers = moves.filter((m) => m.cause !== "affinity").length;
+    tiles.append(tile("Account moves", fmtInt(moves.length), moves.length ? fmtInt(failovers) + " failover · " + fmtUSD(sum(moves, (m) => m.extra_usd)) + " extra cache writes" : "every session stayed on its account"));
+
+    const providerTokens = {};
+    for (const a of accounts) providerTokens[a.provider] = (providerTokens[a.provider] || 0) + a.total_tokens;
+    table($("accountsTable"), [
+      { label: "Account", get: (a) => el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, [dot(providerColor(a.provider)), document.createTextNode(accountName(a)), a.plan ? chip(a.plan) : null]) },
+      { label: "Plan price", num: true, get: (a) => priceCell(a, manage) },
+      { label: "Share", num: true, get: (a) => pct(ratio(a.total_tokens, providerTokens[a.provider]), 0) },
+      { label: "Requests", num: true, get: (a) => fmtInt(a.requests) },
+      { label: "Tokens", num: true, get: (a) => compact(a.total_tokens) },
+      { label: "API value", num: true, get: (a) => fmtUSD(a.cost_usd) },
+      { label: "Pace /mo", num: true, get: (a) => (a.coverage_days > 0 ? fmtUSD(monthlyPace(a)) : "—") },
+      { label: "Value", num: true, get: (a) => (a.monthly_usd > 0 && a.coverage_days > 0 ? (monthlyPace(a) / a.monthly_usd).toFixed(1) + "×" : "—") },
+      { label: "Closest to limit", get: (a) => {
+        const w = closestWindow(a.auth_id, a.provider, now);
+        if (!w) return "—";
+        const sev = w.used_pct >= 90 ? "bad" : w.used_pct >= 70 ? "warn" : "";
+        return el("span", null, [chip(pct(w.used_pct) + " " + (w.label || w.key).toLowerCase(), sev), document.createTextNode(w.resets_at > now ? " resets in " + dur(w.resets_at - now) : "")]);
+      } },
+      { label: "Rate limited", num: true, get: (a) => fmtInt(a.rate_limited) },
+    ], accounts, "No accounts have served requests in this range.");
+
+    // Append every card before drawing, so each chart measures its final grid column width.
+    const charts = $("accountCharts");
+    charts.textContent = "";
+    const pending = [];
+    for (const p of providers) {
+      const rows = accounts.filter((a) => a.provider === p);
+      const keys = rows.map((a, i) => ({ key: a.auth_id, label: accountName(a), color: slotColor((i % 8) + 1) }));
+      const byT = new Map();
+      for (const pt of r.series || []) {
+        if (!rows.some((a) => a.auth_id === pt.auth_id)) continue;
+        if (!byT.has(pt.t)) byT.set(pt.t, { t: pt.t, values: {} });
+        byT.get(pt.t).values[pt.auth_id] = pt.total_tokens;
+      }
+      const card = el("div", { class: "card" }, [el("h3", { text: providerName(p) + ": tokens per account" })]);
+      const chartHost = el("div", { class: "chart" });
+      const legendHost = el("div", { class: "legend" });
+      card.append(chartHost, legendHost);
+      charts.append(card);
+      pending.push(() => {
+        const bucketMs = r.bucket_ms || HOUR;
+        const x0 = Math.floor((data.range.from + tzOffsetMs()) / bucketMs) * bucketMs - tzOffsetMs();
+        columnChart(chartHost, { buckets: [...byT.values()].sort((a, b) => a.t - b.t), keys, bucketMs, x0, x1: data.range.to, yFmt: (v) => compact(v), aria: providerName(p) + " tokens per account" });
+        legend(legendHost, keys);
+      });
+    }
+    for (const draw of pending) draw();
+
+    table($("movesTable"), [
+      { label: "When", get: (m) => when(m.ts) },
+      { label: "Thread", get: (m) => threadLink(m.session_id) },
+      { label: "From", get: (m) => withDot(m.provider, maskEmail(m.from_account) || m.from_auth_id) },
+      { label: "To", get: (m) => maskEmail(m.to_account) || m.to_auth_id },
+      { label: "Cause", get: (m) => (m.cause === "affinity" ? "idle, affinity expired" : m.cause.replace("failover after ", "failover after ").replace(/_/g, " ")) },
+      { label: "Cache rewritten", num: true, get: (m) => compact(m.cache_write_tokens) },
+      { label: "Extra cost", num: true, get: (m) => fmtUSD(m.extra_usd) },
+    ], moves, "No session moved to another account of the same provider in this range.");
+  }
+  function priceCell(a, manage) {
+    const text = a.monthly_usd == null ? "—" : fmtUSD(a.monthly_usd) + (a.monthly_source === "plan" ? " (list)" : "");
+    if (!manage) return text;
+    const input = el("input", { type: "number", min: "0", max: "100000", step: "1", placeholder: a.monthly_source === "plan" ? String(a.monthly_usd) : "per mo", "aria-label": "Monthly plan price in USD for " + accountName(a) });
+    if (a.monthly_source === "set") input.value = String(a.monthly_usd);
+    const box = el("span", { class: "price", title: "Monthly plan price in USD. Leave empty to use the plan's list price, when the plan is known." }, [document.createTextNode("$"), input]);
+    input.addEventListener("change", async () => {
+      const raw = input.value.trim();
+      input.disabled = true;
+      try {
+        await apiSend("PUT", "accounts/price", { auth_id: a.auth_id, monthly_usd: raw === "" ? null : Number(raw) });
+        data.accounts = await api("accounts", data.range.accountsParams);
+        renderAccounts();
+      } catch (err) {
+        banner("Could not save the plan price: " + err.message);
+        input.disabled = false;
+      }
+    });
+    return box;
+  }
+
+  // ---------- render: waste ----------
+  function renderWaste() {
+    const w = data.waste || {};
+    const first = w.first_writes || [], idle = w.idle_rewrites || [], fast = w.fast_mode || [], moves = w.moves || [];
+    const tiles = $("wasteTiles");
+    tiles.textContent = "";
+    const harnessFirst = first.filter((f) => f.harness_warning).length;
+    tiles.append(
+      tile("Large first cache writes", fmtInt(first.length), first.length ? fmtUSD(sum(first, (f) => f.cost_usd)) + " · " + fmtInt(harnessFirst) + " via the Codex harness" : "no thread started above " + compact(w.first_write_tokens)),
+      tile("Cache rewritten after idle", fmtInt(idle.length), idle.length ? fmtUSD(sum(idle, (i) => i.extra_usd)) + " more than reading it" : "no expensive rewrites"),
+      tile("Fast-mode refusals", fmtInt(sum(fast, (f) => f.refusals)), fast.length ? fmtInt(sum(fast, (f) => f.sessions)) + " sessions · " + spent(sum(fast, (f) => f.latency_ms)) + " spent on refusals" : "none"),
+      tile("Account moves", fmtInt(moves.length), moves.length ? fmtUSD(sum(moves, (m) => m.extra_usd)) + " in extra cache writes" : "none"),
+    );
+    $("firstWritesSub").textContent = "Threads whose first request wrote at least " + compact(w.first_write_tokens) + " tokens to the prompt cache. Claude Code starts near 30K; Claude models driven by the Codex harness (T3's Codex threads, Codex CLI) write 350K or more because that harness sends its whole tool catalog.";
+    const harnessCell = (r) => el("span", null, [document.createTextNode(r.harness), r.harness_warning ? chip("tool catalog", "warn", "Claude through the Codex harness resends a very large tool catalog") : null]);
+    table($("firstWrites"), [
+      { label: "When", get: (r) => when(r.ts) },
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Harness", get: harnessCell },
+      { label: "Model", get: (r) => r.model },
+      { label: "Cache write", num: true, get: (r) => compact(r.cache_write_tokens) },
+      { label: "Cost", num: true, get: (r) => fmtUSD(r.cost_usd) },
+      { label: "Thread", get: (r) => threadLink(r.session_id) },
+    ], first, "No thread started with a cache write above the threshold.");
+    $("idleSub").textContent = "Requests after at least " + (w.idle_minutes || 5) + " idle minutes that wrote " + compact(w.rewrite_tokens) + "+ cache tokens, more than they read: the prompt cache had expired, so the whole context was written again. Anthropic keeps it 5 minutes unless the tool asks for an hour.";
+    table($("idleRewrites"), [
+      { label: "When", get: (r) => when(r.ts) },
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Tool", get: (r) => r.client_kind },
+      { label: "Idle", num: true, get: (r) => dur(r.gap_ms) },
+      { label: "Rewritten", num: true, get: (r) => compact(r.cache_write_tokens) },
+      { label: "Extra", num: true, get: (r) => fmtUSD(r.extra_usd) },
+      { label: "Thread", get: (r) => threadLink(r.session_id) },
+    ], idle, "No cache was rewritten after an idle gap.");
+    table($("fastMode"), [
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Tool", get: (r) => r.client_kind },
+      { label: "Refusals", num: true, get: (r) => fmtInt(r.refusals) },
+      { label: "Sessions", num: true, get: (r) => fmtInt(r.sessions) },
+      { label: "Last", get: (r) => when(r.last_ms) },
+    ], fast, "No fast-mode refusals in this range.");
+  }
+
+  // ---------- render: threads ----------
+  function renderThreads() {
+    for (const b of $("threadSort").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.value === prefs.threadSort));
+    const rows = (data.threads && data.threads.threads) || [];
+    table($("threads"), [
+      { label: "Last active", get: (r) => when(r.last_ms) },
+      { label: "Thread", cls: "mono", get: (r) => r.session_id.slice(0, 8) },
+      { label: "Machine", get: (r) => hostName(r.client_ip) },
+      { label: "Harness", get: (r) => el("span", null, [document.createTextNode(r.harness), r.harness_warning ? chip("tool catalog", "warn") : null]) },
+      { label: "Models", get: (r) => r.models },
+      { label: "Requests", num: true, get: (r) => fmtInt(r.requests) + (r.failed ? " (" + fmtInt(r.failed) + " failed)" : "") },
+      { label: "Tokens", num: true, get: (r) => compact(r.input_tokens + r.cache_read_tokens + r.cache_write_tokens + r.output_tokens) },
+      { label: "API value", num: true, get: (r) => fmtUSD(r.cost_usd) },
+      { label: "First write", num: true, get: (r) => compact(r.first_cache_write) },
+      { label: "Accounts", num: true, get: (r) => (r.accounts > 1 ? chip(r.accounts + " · moved", "warn") : String(r.accounts || 0)) },
+    ], rows, "No threads in this range.", showThread, (r) => openThread && openThread.session_id === r.session_id);
+  }
+  async function showThread(row) {
+    const known = ((data.threads && data.threads.threads) || []).find((t) => t.session_id === row.session_id);
+    openThread = known || row;
+    const seq = ++threadSeq;
+    $("threadDetail").hidden = false;
+    $("threadTitle").textContent = "Thread " + row.session_id.slice(0, 8);
+    $("threadSub").textContent = "Loading…";
+    renderThreads();
+    $("threadDetail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    try {
+      const detail = await api("thread", { session: row.session_id });
+      if (seq !== threadSeq) return;
+      openThread.detail = detail;
+      renderThreadDetail();
+    } catch (err) {
+      if (seq === threadSeq) $("threadSub").textContent = "Could not load the thread: " + err.message;
+    }
+  }
+  async function refreshThread() {
+    const seq = threadSeq;
+    try {
+      const detail = await api("thread", { session: openThread.session_id });
+      if (seq !== threadSeq || !openThread) return;
+      const known = ((data.threads && data.threads.threads) || []).find((t) => t.session_id === openThread.session_id);
+      if (known) openThread = Object.assign(known, { detail });
+      else openThread.detail = detail;
+      renderThreadDetail();
+    } catch (_) { /* keep the previous detail */ }
+  }
+  function renderThreadDetail() {
+    if (!openThread || !openThread.detail) return;
+    const reqs = openThread.detail.requests || [];
+    const t = openThread;
+    const ok = reqs.filter((r) => !r.failed);
+    const tokensIn = sum(ok, (r) => r.input_tokens + r.cache_read_tokens + r.cache_write_tokens);
+    const cost = sum(reqs, (r) => r.cost_usd);
+    const models = [...new Set(reqs.map((r) => r.model).filter(Boolean))].join(", ");
+    const parts = [];
+    if (t.client_ip != null) parts.push(hostName(t.client_ip));
+    if (t.harness) parts.push(t.harness);
+    if (models) parts.push(models);
+    if (reqs.length) parts.push(when(reqs[0].ts) + " – " + when(reqs[reqs.length - 1].ts));
+    $("threadSub").textContent = parts.join(" · ") + (openThread.detail.truncated ? " · first 5,000 requests" : "");
+    const stats = $("threadStats");
+    stats.textContent = "";
+    stats.append(
+      stat("Requests", fmtInt(reqs.length) + (reqs.length - ok.length ? " · " + fmtInt(reqs.length - ok.length) + " failed" : "")),
+      stat("API value", fmtUSD(cost)),
+      stat("Cache hit", pct(ratio(sum(ok, (r) => r.cache_read_tokens), tokensIn), 1)),
+      stat("Cache written", compact(sum(ok, (r) => r.cache_write_tokens))),
+      stat("Output", compact(sum(ok, (r) => r.output_tokens))),
+      stat("Accounts", String(new Set(ok.map((r) => r.provider + "|" + r.account)).size)),
+    );
+    let acc = 0;
+    const points = reqs.map((r) => { acc += r.cost_usd || 0; return [r.ts, acc]; });
+    const host = $("threadChart");
+    if (points.length > 1) {
+      const x0 = points[0][0], x1 = Math.max(points[points.length - 1][0], x0 + 60e3);
+      const y1 = niceMax(acc);
+      lineChart(host, { x0, x1, y0: 0, y1, yTicks: [0, y1 / 2, y1], yFmt: (v) => fmtUSD(v), now: Infinity, aria: "Cumulative API value of this thread",
+        series: [{ name: "API value so far", points, color: slotColor(2), area: true }] });
+      legend($("threadLegend"), [{ label: "Cumulative API value", color: slotColor(2), line: true }]);
+    } else {
+      host.textContent = "";
+      $("threadLegend").textContent = "";
+    }
+    table($("threadRequests"), [
+      { label: "Time", get: (r) => dtFull.format(r.ts) },
+      { label: "Model", get: (r) => withDot(r.provider, r.model || "unknown") },
+      { label: "Account", get: (r) => maskEmail(r.account) },
+      { label: "Status", get: statusCell },
+      { label: "Input", num: true, get: (r) => compact(r.input_tokens) },
+      { label: "Cache read", num: true, get: (r) => compact(r.cache_read_tokens) },
+      { label: "Cache write", num: true, get: (r) => compact(r.cache_write_tokens) },
+      { label: "Output", num: true, get: (r) => compact(r.output_tokens) },
+      { label: "API value", num: true, get: (r) => (r.cost_usd == null ? "—" : fmtUSD(r.cost_usd)) },
+      { label: "TTFT", num: true, get: (r) => (r.ttft_ms ? ms(r.ttft_ms) : "—") },
+      { label: "Duration", num: true, get: (r) => (r.latency_ms ? ms(r.latency_ms) : "—") },
+      { label: "Effort", get: (r) => [r.reasoning_effort, r.service_tier && r.service_tier !== "auto" ? r.service_tier : ""].filter(Boolean).join(" · ") },
+    ], reqs.slice().reverse(), "No requests recorded for this thread.");
+  }
+
+  // ---------- render: errors and latency ----------
+  function renderHealth() {
+    const h = data.health || {};
+    const errors = h.errors || [];
+    const total = data.summary.totals;
+    const byClass = {};
+    for (const e of errors) byClass[e.error_class] = (byClass[e.error_class] || 0) + e.count;
+    const classes = Object.keys(byClass).sort((a, b) => byClass[b] - byClass[a]);
+    const tiles = $("errorTiles");
+    tiles.textContent = "";
+    tiles.append(tile("Failed requests", fmtInt(total.failed), pct(ratio(total.failed, total.requests), 1) + " of requests"));
+    for (const c of classes.slice(0, 3)) tiles.append(tile(errorLabel(c), fmtInt(byClass[c]), pct(ratio(byClass[c], total.failed), 1) + " of failures"));
+    const access = h.access_failures || [];
+    tiles.append(tile("Rejected keys", fmtInt(sum(access, (a) => a.count)), access.length ? "from " + new Set(access.map((a) => a.client_ip)).size + " addresses" : "none"));
+
+    const keys = classes.map((c) => ({ key: c, label: errorLabel(c), color: errorColor(c) }));
+    const byT = new Map();
+    for (const p of h.series || []) {
+      if (!byT.has(p.t)) byT.set(p.t, { t: p.t, values: {} });
+      byT.get(p.t).values[p.error_class] = p.count;
+    }
+    const bucketMs = h.bucket_ms || HOUR;
+    const x0 = Math.floor((data.range.from + tzOffsetMs()) / bucketMs) * bucketMs - tzOffsetMs();
+    if (classes.length) {
+      columnChart($("errorsChart"), { buckets: [...byT.values()].sort((a, b) => a.t - b.t), keys, bucketMs, x0, x1: data.range.to, yFmt: (v) => compact(v), aria: "Failed requests per bucket by cause" });
+      legend($("errorsLegend"), keys);
+    } else {
+      $("errorsChart").textContent = "";
+      $("errorsLegend").textContent = "";
+    }
+    table($("errorsTable"), [
+      { label: "Cause", get: (e) => el("span", { style: "display:inline-flex;align-items:center;gap:8px" }, [el("span", { class: "key-rect", style: "background:" + errorColor(e.error_class) }), document.createTextNode(errorLabel(e.error_class))]) },
+      { label: "Provider", get: (e) => providerName(e.provider) },
+      { label: "Machine", get: (e) => hostName(e.client_ip) },
+      { label: "Tool", get: (e) => e.client_kind || "unknown" },
+      { label: "Status", num: true, get: (e) => String(e.status_code || "") },
+      { label: "Count", num: true, get: (e) => fmtInt(e.count) },
+      { label: "Last", get: (e) => when(e.last_ms) },
+    ], errors, "No failed requests in this range.");
+    table($("latencyTable"), [
+      { label: "Model", get: (r) => withDot(r.provider, r.model || "unknown") },
+      { label: "Requests", num: true, get: (r) => fmtInt(r.requests) },
+      { label: "p50", num: true, get: (r) => ms(r.latency_p50) },
+      { label: "p90", num: true, get: (r) => ms(r.latency_p90) },
+      { label: "p99", num: true, get: (r) => ms(r.latency_p99) },
+      { label: "TTFT p50", num: true, get: (r) => (r.ttft_samples ? ms(r.ttft_p50) : "—") },
+      { label: "TTFT p90", num: true, get: (r) => (r.ttft_samples ? ms(r.ttft_p90) : "—") },
+      { label: "TTFT p99", num: true, get: (r) => (r.ttft_samples ? ms(r.ttft_p99) : "—") },
+    ], h.latency || [], "No successful requests in this range.");
+    table($("accessFailures"), [
+      { label: "Key", get: (r) => (r.kind === "client_key" ? "Client key (proxy API)" : "Management or viewer key") },
+      { label: "Source", get: (r) => hostName(r.client_ip) },
+      { label: "Count", num: true, get: (r) => fmtInt(r.count) },
+      { label: "Last", get: (r) => when(r.last_ms) },
+      { label: "Last route", cls: "mono", get: (r) => r.route },
+    ], access, "No rejected keys in this range.");
+  }
+
+  // ---------- render: data and settings ----------
+  function renderAdmin() {
+    const manage = canManage();
+    const st = data.status;
+    const a = data.alerts || {};
+    const luna = a.luna || {};
+    $("pushStatus").textContent = luna.configured
+      ? "Connected to Luna at " + luna.server + "."
+      : luna.missing
+        ? "Not connected to Luna: " + luna.missing + " is not set on the hub."
+        : "Not connected to Luna: see \"Alerts and Luna\" in ops/windows/README.md.";
+    if (!settingsDirty && a.settings) {
+      $("setQuotaPct").value = a.settings.quota_pct;
+      $("setProjection").value = a.settings.projection_min_pct;
+      $("setFastMode").value = a.settings.fast_mode_refusals;
+      $("setWaste").checked = a.settings.waste_alerts;
+      $("setLunaLimits").checked = a.settings.luna_limits;
+      $("setLunaWaste").checked = a.settings.luna_waste;
+    }
+    for (const input of $("alertForm").querySelectorAll("input")) input.disabled = !manage;
+    $("saveAlerts").hidden = !manage;
+    $("testPush").hidden = !manage || !luna.configured;
+    if (!manage) $("alertFormStatus").textContent = "Read-only key: sign in with the management key to change settings.";
+
+    const b = st.backup || {};
+    const p = st.prices || {};
+    const stats = $("dataStats");
+    stats.textContent = "";
+    stats.append(
+      stat("Nightly backup", b.enabled ? String(b.hour).padStart(2, "0") + ":00 · keeps " + b.keep : "off"),
+      stat("Last backup", b.last_ms ? when(b.last_ms) + (b.last_bytes ? " · " + (b.last_bytes / 1048576).toFixed(1) + " MB" : "") : "never"),
+      stat("Prices", (p.models ? fmtInt(p.models) + " models · " : "") + (p.source || "none")),
+      stat("Database", (st.database_bytes / 1048576).toFixed(1) + " MB"),
+    );
+    const notes = [];
+    if (b.last_error) notes.push("Last backup failed: " + b.last_error);
+    if (b.enabled && b.dir) notes.push("Backups go to " + b.dir + (b.last_file ? " (latest " + b.last_file + ")" : "") + ".");
+    if (!b.enabled) notes.push("Set INSIGHTS_BACKUP_DIR in the hub's .env to turn on nightly backups.");
+    $("dataNote").textContent = notes.join(" ");
+    $("backupNow").hidden = !manage || !b.enabled;
+
+    $("sqlCard").hidden = !manage;
+    if (manage && !schemaLoaded) loadSchema();
+  }
+  async function loadSchema() {
+    schemaLoaded = true;
+    try {
+      const s = await api("sql/schema");
+      const host = $("sqlSchema");
+      host.textContent = "";
+      for (const t of s.tables || []) {
+        host.append(el("div", { style: "margin:6px 0" }, [el("code", { text: t.name }), document.createTextNode(" (" + fmtInt(t.rows) + " rows): " + (t.columns || []).join(", "))]));
+      }
+    } catch (err) {
+      schemaLoaded = false;
+      $("sqlSchema").textContent = "Could not load the schema: " + err.message;
+    }
+  }
+  async function runSQL() {
+    const query = $("sqlInput").value;
+    if (!query.trim()) return;
+    $("sqlRun").disabled = true;
+    $("sqlStatus").textContent = "Running…";
+    try {
+      const r = await apiSend("POST", "sql", { query });
+      const numeric = r.columns.map((_, i) => r.rows.length > 0 && r.rows.every((row) => row[i] == null || typeof row[i] === "number"));
+      table($("sqlResult"), r.columns.map((c, i) => ({ label: c, num: numeric[i], get: (row) => (row[i] == null ? "NULL" : typeof row[i] === "number" && !Number.isInteger(row[i]) ? String(Math.round(row[i] * 1e6) / 1e6) : String(row[i])) })),
+        r.rows, "The query returned no rows.");
+      $("sqlStatus").textContent = fmtInt(r.rows.length) + (r.truncated ? "+ rows (first 1,000 shown)" : r.rows.length === 1 ? " row" : " rows") + " · " + r.elapsed_ms + " ms";
+    } catch (err) {
+      $("sqlStatus").textContent = err.message;
+      $("sqlResult").textContent = "";
+    } finally {
+      $("sqlRun").disabled = false;
+    }
+  }
+
+  function renderStatus() {
+    const st = data.status;
+    $("hubStatus").textContent = fmtInt(st.requests) + " requests · " + fmtInt(st.quota_samples) + " quota samples · " +
+      (st.database_bytes / 1048576).toFixed(1) + " MB" + (st.dropped_rows ? " · " + fmtInt(st.dropped_rows) + " dropped" : "") +
+      (st.access === "viewer" ? " · read-only key" : "") + (openAlerts() ? " · " + openAlerts() + " open alerts" : "");
+    // The viewer key cannot open the management panel, and remote access exposes only this page.
+    $("managementLink").hidden = st.access === "viewer";
+  }
+
+  function openAlerts() {
+    const weekAgo = Date.now() - 7 * DAY;
+    return ((data && data.alerts && data.alerts.alerts) || []).filter((x) => !x.acked_ms && x.ts >= weekAgo).length;
+  }
+
+  function render() {
+    if (!data) return;
+    hideTip();
+    // Each section renders on its own so one failure does not blank the rest of the page.
+    for (const part of [renderStatus, renderAlerts, renderPools, renderUsage, renderAccounts, renderWaste, renderThreads, renderThreadDetail, renderHealth, renderSessions, renderRecent, renderAdmin]) {
+      try { part(); } catch (err) { console.error(err); banner("Part of the page failed to render: " + err.message); }
+    }
+  }
+
+  // ---------- data ----------
+  class AuthError extends Error {}
+  function getKey() { return localStorage.getItem("insights.key") || ""; }
+  let keyPrompt = null;
+  function askKey(message) {
+    // Concurrent loads share one prompt so a refresh never clears what the user is typing.
+    if (keyPrompt) return keyPrompt;
+    keyPrompt = new Promise((resolve) => {
+      const dlg = $("keyDialog");
+      $("keyInput").value = "";
+      $("keyError").textContent = message || "";
+      $("keyError").hidden = !message;
+      dlg.addEventListener("close", () => {
+        const v = $("keyInput").value.trim();
+        if (v) localStorage.setItem("insights.key", v);
+        keyPrompt = null;
+        resolve();
+      }, { once: true });
+      dlg.showModal();
+    });
+    return keyPrompt;
+  }
+  async function api(path, params) {
+    const url = new URL("/v8/management/insights/" + path, location.origin);
+    for (const k in params || {}) url.searchParams.set(k, params[k]);
+    const res = await fetch(url, { headers: { Authorization: "Bearer " + getKey() }, cache: "no-store" });
+    if (!res.ok) {
+      let msg = res.status + " " + res.statusText;
+      try { const body = await res.json(); if (body && body.error) msg = body.error; } catch (_) { /* keep status text */ }
+      // Only 401 means a missing or wrong key; a 403 (IP ban, remote management off) is not fixed by re-entering it.
+      throw res.status === 401 ? new AuthError(msg) : new Error(msg);
+    }
+    return res.json();
+  }
+  async function apiSend(method, path, body) {
+    const res = await fetch(new URL("/v8/management/insights/" + path, location.origin), {
+      method, cache: "no-store", body: JSON.stringify(body || {}),
+      headers: { Authorization: "Bearer " + getKey(), "Content-Type": "application/json" },
+    });
+    let payload = null;
+    try { payload = await res.json(); } catch (_) { /* keep status text */ }
+    if (!res.ok) throw new Error((payload && payload.error) || res.status + " " + res.statusText);
+    return payload;
+  }
+  function banner(text) { const b = $("banner"); b.textContent = text || ""; b.hidden = !text; }
+
+  async function load() {
+    // An empty key would still count as a failed attempt, so keep asking until one is entered.
+    while (!getKey()) await askKey();
+    const seq = ++loadSeq;
+    $("main").classList.add("loading");
+    const now = Date.now();
+    const span = RANGES[prefs.range];
+    const from = now - span;
+    const bucket = span <= 2 * DAY ? HOUR : span <= 8 * DAY ? 6 * HOUR : DAY;
+    const tz = -new Date().getTimezoneOffset();
+    // Quota history covers at least the burn lookback so short ranges still project correctly.
+    const quotaFrom = Math.min(from, now - 7 * HOUR);
+    try {
+      // Check the key with one request first: the hub bans an IP for 30 minutes after 5 failed attempts.
+      const status = await api("status");
+      const range = { from, to: now, accountsParams: { from, to: now, bucket_ms: bucket, tz_offset_min: tz } };
+      const [summary, quota, sessions, requests, accounts, waste, threads, health, alerts] = await Promise.all([
+        api("summary", { from, to: now, bucket_ms: bucket, tz_offset_min: tz }),
+        api("quota", { from: quotaFrom, to: now }),
+        api("sessions", { from, to: now, limit: 50 }),
+        api("requests", { limit: 100 }),
+        api("accounts", range.accountsParams),
+        api("waste", { from, to: now }),
+        api("threads", { from, to: now, sort: prefs.threadSort, limit: 50 }),
+        api("health", { from, to: now, bucket_ms: bucket, tz_offset_min: tz }),
+        api("alerts", { limit: 100 }),
+      ]);
+      if (seq !== loadSeq) return;
+      data = { status, summary, quota, sessions, requests, accounts, waste, threads, health, alerts, range };
+      banner("");
+      render();
+      if (openThread) refreshThread();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        localStorage.removeItem("insights.key");
+        await askKey("That key was rejected. After 5 wrong tries the hub blocks this device for 30 minutes.");
+        return load();
+      }
+      banner("Could not load insights: " + err.message);
+    } finally {
+      if (seq === loadSeq) $("main").classList.remove("loading");
+    }
+  }
+
+  // ---------- controls ----------
+  function syncControls() {
+    for (const seg of document.querySelectorAll(".seg[data-pref]")) {
+      for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.value === String(prefs[seg.dataset.pref])));
+    }
+    $("future").value = prefs.future;
+    $("toggleEmails").setAttribute("aria-pressed", String(prefs.emails));
+    $("toggleEmails").textContent = prefs.emails ? "Hide emails" : "Show emails";
+  }
+  for (const seg of document.querySelectorAll(".seg[data-pref]")) {
+    seg.addEventListener("click", (evt) => {
+      const b = evt.target.closest("button");
+      if (!b) return;
+      prefs[seg.dataset.pref] = b.dataset.value;
+      savePrefs(); syncControls();
+      if (seg.dataset.pref === "theme") applyTheme();
+      if (seg.dataset.pref === "range") load(); else render();
+    });
+  }
+  $("future").addEventListener("change", () => { prefs.future = $("future").value; savePrefs(); render(); });
+  $("threadSort").addEventListener("click", async (evt) => {
+    const b = evt.target.closest("button");
+    if (!b || !data || b.dataset.value === prefs.threadSort) return;
+    prefs.threadSort = b.dataset.value;
+    savePrefs();
+    try {
+      data.threads = await api("threads", { from: data.range.from, to: data.range.to, sort: prefs.threadSort, limit: 50 });
+      renderThreads();
+    } catch (err) { banner("Could not load threads: " + err.message); }
+  });
+  $("threadClose").addEventListener("click", () => { openThread = null; threadSeq++; $("threadDetail").hidden = true; renderThreads(); });
+  $("ackAll").addEventListener("click", () => ackAlerts({ all: true }, $("ackAll")));
+  $("alertForm").addEventListener("input", () => { settingsDirty = true; $("alertFormStatus").textContent = ""; });
+  $("alertForm").addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    const body = {
+      quota_pct: Number($("setQuotaPct").value), projection_min_pct: Number($("setProjection").value),
+      fast_mode_refusals: Math.round(Number($("setFastMode").value)), waste_alerts: $("setWaste").checked,
+      luna_limits: $("setLunaLimits").checked, luna_waste: $("setLunaWaste").checked,
+    };
+    $("saveAlerts").disabled = true;
+    try {
+      const r = await apiSend("PUT", "alerts/settings", body);
+      data.alerts.settings = r.settings;
+      settingsDirty = false;
+      $("alertFormStatus").textContent = "Saved.";
+    } catch (err) {
+      $("alertFormStatus").textContent = err.message;
+    } finally {
+      $("saveAlerts").disabled = false;
+    }
+  });
+  $("testPush").addEventListener("click", async () => {
+    $("testPush").disabled = true;
+    $("alertFormStatus").textContent = "Sending…";
+    try {
+      const r = await apiSend("POST", "alerts/test");
+      $("alertFormStatus").textContent = "Sent to Luna at " + r.server + ". It is listed under Alerts on Luna's Work screen (info alerts are not spoken or pushed); acknowledge it there.";
+    } catch (err) {
+      $("alertFormStatus").textContent = "Luna did not take it: " + err.message;
+    } finally {
+      $("testPush").disabled = false;
+    }
+  });
+  $("backupNow").addEventListener("click", async () => {
+    $("backupNow").disabled = true;
+    $("backupStatus").textContent = "Backing up…";
+    try {
+      const r = await apiSend("POST", "backup");
+      data.status.backup = r.backup;
+      $("backupStatus").textContent = "Saved " + (r.backup.last_file || "backup") + ".";
+      renderAdmin();
+    } catch (err) {
+      $("backupStatus").textContent = err.message;
+    } finally {
+      $("backupNow").disabled = false;
+    }
+  });
+  for (const ex of SQL_EXAMPLES) $("sqlExamples").append(el("option", { value: ex.sql, text: ex.label }));
+  $("sqlExamples").addEventListener("change", () => {
+    if ($("sqlExamples").value) $("sqlInput").value = $("sqlExamples").value;
+    $("sqlExamples").value = "";
+  });
+  $("sqlRun").addEventListener("click", runSQL);
+  $("sqlInput").addEventListener("keydown", (evt) => { if (evt.key === "Enter" && (evt.ctrlKey || evt.metaKey)) { evt.preventDefault(); runSQL(); } });
+  $("toggleEmails").addEventListener("click", () => { prefs.emails = !prefs.emails; savePrefs(); syncControls(); render(); });
+  $("refresh").addEventListener("click", () => load());
+  $("signOut").addEventListener("click", () => {
+    localStorage.removeItem("insights.key");
+    data = null; openThread = null; schemaLoaded = false; settingsDirty = false;
+    $("threadDetail").hidden = true;
+    load();
+  });
+  let resizeTimer = 0, lastWidth = innerWidth;
+  addEventListener("resize", () => {
+    // Mobile browsers also fire resize when the address bar shows or hides; charts depend only on width.
+    if (innerWidth === lastWidth) return;
+    lastWidth = innerWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 150);
+  });
+  addEventListener("scroll", hideTip, { passive: true });
+  document.addEventListener("pointerdown", (evt) => { if (!evt.target.closest("svg")) hideTip(); });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (prefs.theme === "auto") { applyTheme(); render(); } });
+  setInterval(() => { if (document.visibilityState === "visible" && !keyPrompt) load(); }, 60e3);
+
+  applyTheme();
+  syncControls();
+  load();
+})();
+</script>
+</body>
+</html>
